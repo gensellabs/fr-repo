@@ -1,0 +1,392 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum AdminRole {
+  SUPER_ADMIN
+  COUNTRY_SYSADMIN
+}
+
+enum OrgRole {
+  GROUP_SYSADMIN
+  GROUP_ADMIN
+  RESPONDER
+}
+
+enum RegistrationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// ─── Geography & Tenancy ──────────────────────────────────────────────────────
+
+model Country {
+  id        Int      @id @default(autoincrement())
+  name      String   @db.VarChar(100)
+  isoCode   String   @unique @db.VarChar(3)
+  dialCode  String?  @db.VarChar(6)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  provinces    Province[]
+  organisations Organisation[]
+  callTypes    LovCallType[]
+  drugs        LovDrug[]
+  reasons      LovReason[]
+  medHistory   LovMedicalHistoryPreset[]
+  adminUsers   AdminUser[]
+
+  @@map("countries")
+}
+
+model Province {
+  id        Int      @id @default(autoincrement())
+  name      String   @db.VarChar(100)
+  countryId Int
+  country   Country  @relation(fields: [countryId], references: [id])
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+
+  districts     District[]
+  organisations Organisation[]
+
+  @@unique([name, countryId])
+  @@map("provinces")
+}
+
+model District {
+  id         Int      @id @default(autoincrement())
+  name       String   @db.VarChar(100)
+  provinceId Int
+  province   Province @relation(fields: [provinceId], references: [id])
+  isActive   Boolean  @default(true)
+  sortOrder  Int      @default(0)
+
+  organisations Organisation[]
+  hospitals     LovHospital[]
+  transports    LovTransport[]
+  areas         LovArea[]
+
+  @@unique([name, provinceId])
+  @@map("districts")
+}
+
+model Organisation {
+  id           Int       @id @default(autoincrement())
+  name         String    @db.VarChar(40)
+  countryId    Int
+  country      Country   @relation(fields: [countryId], references: [id])
+  provinceId   Int
+  province     Province  @relation(fields: [provinceId], references: [id])
+  districtId   Int
+  district     District  @relation(fields: [districtId], references: [id])
+  isActive     Boolean   @default(true)
+  registeredAt DateTime  @default(now())
+  approvedAt   DateTime?
+  approvedById Int?
+
+  responders LovResponder[]
+  incidents  Incident[]
+  areas      LovArea[]
+
+  @@map("organisations")
+}
+
+model AdminUser {
+  id           Int       @id @default(autoincrement())
+  name         String
+  email        String    @unique
+  mobile       String?
+  passwordHash String
+  role         AdminRole
+  countryId    Int?
+  country      Country?  @relation(fields: [countryId], references: [id])
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  lastLoginAt  DateTime?
+
+  @@map("admin_users")
+}
+
+model OrgRegistration {
+  id            Int                @id @default(autoincrement())
+  orgName       String             @db.VarChar(40)
+  contactName   String
+  contactEmail  String
+  contactMobile String?
+  countryId     Int
+  provinceId    Int
+  districtId    Int
+  status        RegistrationStatus @default(PENDING)
+  submittedAt   DateTime           @default(now())
+  reviewedAt    DateTime?
+  reviewedById  Int?
+  reviewNotes   String?
+
+  @@map("org_registrations")
+}
+
+// ─── LOV Tables ───────────────────────────────────────────────────────────────
+
+model LovCallType {
+  id        Int       @id @default(autoincrement())
+  value     String    @unique
+  countryId Int?
+  country   Country?  @relation(fields: [countryId], references: [id])
+  isActive  Boolean   @default(true)
+  sortOrder Int       @default(0)
+  createdAt DateTime  @default(now())
+  createdBy String?
+  incidents Incident[]
+
+  @@map("lov_call_types")
+}
+
+model LovReason {
+  id        Int       @id @default(autoincrement())
+  value     String    @unique
+  countryId Int?
+  country   Country?  @relation(fields: [countryId], references: [id])
+  isActive  Boolean   @default(true)
+  sortOrder Int       @default(0)
+  createdAt DateTime  @default(now())
+  createdBy String?
+  patients  Patient[]
+
+  @@map("lov_reasons")
+}
+
+model LovArea {
+  id             Int           @id @default(autoincrement())
+  value          String        @unique
+  organisationId Int?
+  organisation   Organisation? @relation(fields: [organisationId], references: [id])
+  districtId     Int?
+  district       District?     @relation(fields: [districtId], references: [id])
+  isActive       Boolean       @default(true)
+  sortOrder      Int           @default(0)
+  createdAt      DateTime      @default(now())
+  createdBy      String?
+  locations      LovLocation[]
+
+  @@map("lov_areas")
+}
+
+model LovLocation {
+  id        Int        @id @default(autoincrement())
+  value     String
+  areaId    Int?
+  area      LovArea?   @relation(fields: [areaId], references: [id])
+  isActive  Boolean    @default(true)
+  sortOrder Int        @default(0)
+  createdAt DateTime   @default(now())
+  createdBy String?
+  incidents Incident[]
+
+  @@unique([value, areaId])
+  @@map("lov_locations")
+}
+
+model LovTransport {
+  id         Int       @id @default(autoincrement())
+  value      String    @unique
+  districtId Int?
+  district   District? @relation(fields: [districtId], references: [id])
+  isActive   Boolean   @default(true)
+  sortOrder  Int       @default(0)
+  createdAt  DateTime  @default(now())
+  createdBy  String?
+  patients   Patient[]
+
+  @@map("lov_transports")
+}
+
+model LovHospital {
+  id         Int       @id @default(autoincrement())
+  value      String    @unique
+  districtId Int?
+  district   District? @relation(fields: [districtId], references: [id])
+  isActive   Boolean   @default(true)
+  sortOrder  Int       @default(0)
+  createdAt  DateTime  @default(now())
+  createdBy  String?
+  patients   Patient[]
+
+  @@map("lov_hospitals")
+}
+
+model LovResponder {
+  id             Int                 @id @default(autoincrement())
+  value          String
+  firstName      String?
+  surname        String?
+  username       String?             @unique @db.VarChar(50)
+  email          String?
+  mobile         String?
+  passwordHash   String?
+  lastLoginAt    DateTime?
+  organisationId Int?
+  organisation   Organisation?       @relation(fields: [organisationId], references: [id])
+  role           OrgRole             @default(RESPONDER)
+  isAdmin        Boolean             @default(false)
+  isSysAdmin     Boolean             @default(false)
+  isActive       Boolean             @default(true)
+  sortOrder      Int                 @default(0)
+  createdAt      DateTime            @default(now())
+  createdBy      String?
+  incidentRoles  IncidentResponder[]
+  photos         IncidentPhoto[]
+
+  @@unique([value, organisationId])
+  @@map("lov_responders")
+}
+
+model LovMedicalHistoryPreset {
+  id        Int      @id @default(autoincrement())
+  value     String   @unique
+  countryId Int?
+  country   Country? @relation(fields: [countryId], references: [id])
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  createdBy String?
+
+  @@map("lov_medical_history_presets")
+}
+
+model LovDrug {
+  id           Int           @id @default(autoincrement())
+  name         String        @unique
+  defaultUom   String?
+  countryId    Int?
+  country      Country?      @relation(fields: [countryId], references: [id])
+  isActive     Boolean       @default(true)
+  sortOrder    Int           @default(0)
+  createdAt    DateTime      @default(now())
+  createdBy    String?
+  patientDrugs PatientDrug[]
+
+  @@map("lov_drugs")
+}
+
+// ─── Incident ─────────────────────────────────────────────────────────────────
+
+model Incident {
+  id             Int                 @id @default(autoincrement())
+  localId        String?             @unique
+  organisationId Int?
+  organisation   Organisation?       @relation(fields: [organisationId], references: [id])
+  incidentDate   DateTime            @default(now())
+  callTypeId     Int?
+  callType       LovCallType?        @relation(fields: [callTypeId], references: [id])
+  locationId     Int?
+  location       LovLocation?        @relation(fields: [locationId], references: [id])
+  patientCount   Int                 @default(1)
+  patients       Patient[]
+  responders     IncidentResponder[]
+  photos         IncidentPhoto[]
+  syncedAt       DateTime?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@map("incidents")
+}
+
+// ─── Patient ──────────────────────────────────────────────────────────────────
+
+model Patient {
+  id             Int             @id @default(autoincrement())
+  incidentId     Int
+  incident       Incident        @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  patientNumber  Int
+  name           String?
+  age            Int?
+  gender         String?
+  reasonId       Int?
+  reason         LovReason?      @relation(fields: [reasonId], references: [id])
+  colourCode     String?
+  medicalHistory String?
+  bpSystolic     Int?
+  bpDiastolic    Int?
+  gcs            Int?
+  spo2           Int?
+  hr             Int?
+  hgt            String?
+  transportId    Int?
+  transport      LovTransport?   @relation(fields: [transportId], references: [id])
+  hospitalId     Int?
+  hospital       LovHospital?    @relation(fields: [hospitalId], references: [id])
+  drugs          PatientDrug[]
+  photos         IncidentPhoto[]
+
+  @@unique([incidentId, patientNumber])
+  @@map("patients")
+}
+
+model PatientDrug {
+  id               Int       @id @default(autoincrement())
+  patientId        Int
+  patient          Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  drugId           Int
+  drug             LovDrug   @relation(fields: [drugId], references: [id])
+  dosageValue      Decimal?  @db.Decimal(8, 3)
+  dosageUom        String?
+  timeAdministered DateTime?
+
+  @@map("patient_drugs")
+}
+
+// ─── Incident Responders ──────────────────────────────────────────────────────
+
+model IncidentResponder {
+  id          Int          @id @default(autoincrement())
+  incidentId  Int
+  incident    Incident     @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  responderId Int
+  responder   LovResponder @relation(fields: [responderId], references: [id])
+  isPrimary   Boolean      @default(false)
+
+  @@unique([incidentId, responderId])
+  @@map("incident_responders")
+}
+
+// ─── Photos ───────────────────────────────────────────────────────────────────
+
+model IncidentPhoto {
+  id          Int          @id @default(autoincrement())
+  incidentId  Int
+  incident    Incident     @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  patientId   Int?
+  patient     Patient?     @relation(fields: [patientId], references: [id])
+  storagePath String
+  latitude    Decimal?     @db.Decimal(9, 6)
+  longitude   Decimal?     @db.Decimal(9, 6)
+  altitude    Decimal?     @db.Decimal(8, 2)
+  capturedAt  DateTime     @default(now())
+  capturedBy  Int
+  responder   LovResponder @relation(fields: [capturedBy], references: [id])
+
+  @@map("incident_photos")
+}
+
+// ─── Audit Log ────────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  tableName String
+  recordId  Int
+  action    String
+  oldValue  String?
+  newValue  String?
+  changedBy String
+  changedAt DateTime @default(now())
+
+  @@map("audit_logs")
+}

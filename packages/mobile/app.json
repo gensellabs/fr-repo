@@ -1,0 +1,55 @@
+{
+  "expo": {
+    "name": "FirstResponders",
+    "slug": "firstresponders",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "firstresponders",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#dc2626"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.firstresponders.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Camera is used to capture incident scene photos.",
+        "NSLocationWhenInUseUsageDescription": "Location is used to geotag incident photos and auto-fill incident location.",
+        "NSPhotoLibraryUsageDescription": "Photo library access allows you to attach existing photos to incidents."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#dc2626"
+      },
+      "package": "com.firstresponders.app",
+      "permissions": [
+        "CAMERA",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-camera",
+        { "cameraPermission": "Allow FirstResponders to access your camera." }
+      ],
+      [
+        "expo-location",
+        { "locationWhenInUsePermission": "Allow FirstResponders to access your location." }
+      ],
+      [
+        "expo-image-picker",
+        { "photosPermission": "Allow FirstResponders to access your photos." }
+      ]
+    ]
+  }
+}
