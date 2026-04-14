@@ -1,5 +1,8 @@
 import { prisma } from '../lib/prisma';
 import { generateUsername } from '../lib/username';
+import { Resend } from 'resend';
+
+const resend = new Resend(process.env.RESEND_API_KEY);
 /**
  * /api/hierarchy — Geographic & organisational hierarchy management
  *
@@ -354,6 +357,26 @@ router.put('/org-registrations/:id', requireAuth, requireCountrySysAdmin, async 
       },
       select: { id: true, value: true, firstName: true, surname: true, email: true, username: true },
     });
+
+    // Send temp password to the contact email
+    if (reg.contactEmail) {
+      await resend.emails.send({
+        from: process.env.RESEND_FROM_EMAIL!,
+        to: reg.contactEmail,
+        subject: 'FirstResponders — Organisation Approved',
+        html: `
+          <p>Hi ${firstName},</p>
+          <p>Your organisation <strong>${org.name}</strong> has been approved on FirstResponders.</p>
+          <p><strong>Your login credentials:</strong></p>
+          <ul>
+            <li><strong>Username:</strong> ${username ?? 'See admin for username'}</li>
+            <li><strong>Temporary Password:</strong> ${tempPassword}</li>
+          </ul>
+          <p>Please log in at your earliest opportunity and change your password.</p>
+          <p>This password will not be shown again.</p>
+        `,
+      });
+    }
 
     res.json({ registration: reg, organisation: org, groupSysAdmin, tempPassword });
     return;

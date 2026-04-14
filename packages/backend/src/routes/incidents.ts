@@ -1,10 +1,14 @@
 import { prisma } from '../lib/prisma';
 import { Router, Request, Response } from 'express';
+import path from 'path';
+import { v4 as uuidv4 } from 'uuid';
+import { PutObjectCommand } from '@aws-sdk/client-s3';
 
 import { requireAuth } from '../middleware/auth';
 import { IncidentCreateSchema, PatientSchema, PatientDrugSchema } from '@firstresponders/shared';
 import { createObjectCsvStringifier } from 'csv-writer';
 import { photoUpload } from '../middleware/upload';
+import { r2, R2_BUCKET } from '../lib/r2';
 
 const router = Router();
 
@@ -403,11 +407,22 @@ router.post(
       latitude?: string; longitude?: string; altitude?: string;
       patientId?: string; capturedAt?: string;
     };
+
+    // Upload to Cloudflare R2
+    const ext = path.extname(req.file.originalname).toLowerCase() || '.jpg';
+    const key = `photos/${uuidv4()}${ext}`;
+    await r2.send(new PutObjectCommand({
+      Bucket: R2_BUCKET,
+      Key: key,
+      Body: req.file.buffer,
+      ContentType: req.file.mimetype,
+    }));
+
     const photo = await prisma.incidentPhoto.create({
       data: {
         incidentId,
         patientId: patientId ? parseInt(patientId, 10) : null,
-        storagePath: req.file.filename,
+        storagePath: key,
         latitude:  latitude  ? parseFloat(latitude)  : null,
         longitude: longitude ? parseFloat(longitude) : null,
         altitude:  altitude  ? parseFloat(altitude)  : null,
