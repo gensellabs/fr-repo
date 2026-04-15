@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, ScrollView, Image, StyleSheet,
-  ActivityIndicator, TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useNavigation } from 'expo-router';
@@ -57,68 +57,6 @@ interface FullIncident {
   patients: Patient[];
 }
 
-// ─── Auth photo component ─────────────────────────────────────────────────────
-
-function AuthPhoto({ photoId }: { photoId: number }) {
-  const [dataUri, setDataUri] = useState<string | null>(null);
-  const [error, setError]     = useState(false);
-
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      try {
-        const token = await SecureStore.getItemAsync('auth_token');
-        const res = await fetch(`${BASE_URL}/api/photos/${photoId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) { if (active) setError(true); return; }
-        const buffer = await res.arrayBuffer();
-        const bytes  = new Uint8Array(buffer);
-        const chunks: string[] = [];
-        for (let i = 0; i < bytes.byteLength; i += 8192) {
-          chunks.push(String.fromCharCode(...(bytes.slice(i, i + 8192) as unknown as number[])));
-        }
-        const base64 = btoa(chunks.join(''));
-        if (active) setDataUri(`data:image/jpeg;base64,${base64}`);
-      } catch {
-        if (active) setError(true);
-      }
-    })();
-    return () => { active = false; };
-  }, [photoId]);
-
-  if (error) {
-    return (
-      <View style={photoStyles.placeholder}>
-        <Text style={{ fontSize: 24 }}>🖼️</Text>
-      </View>
-    );
-  }
-  if (!dataUri) {
-    return (
-      <View style={photoStyles.placeholder}>
-        <ActivityIndicator size="small" color="#dc2626" />
-      </View>
-    );
-  }
-  return (
-    <Image
-      source={{ uri: dataUri }}
-      style={photoStyles.thumb}
-      resizeMode="cover"
-      onError={() => setError(true)}
-    />
-  );
-}
-
-const photoStyles = StyleSheet.create({
-  placeholder: {
-    width: '47%', aspectRatio: 4 / 3, backgroundColor: '#f3f4f6',
-    borderRadius: 10, justifyContent: 'center', alignItems: 'center',
-  },
-  thumb: { width: '47%', aspectRatio: 4 / 3, borderRadius: 10 },
-});
-
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
 export default function IncidentDetail() {
@@ -127,6 +65,9 @@ export default function IncidentDetail() {
   const [incident, setIncident] = useState<FullIncident | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  // Photo URIs keyed by photo ID — stored in parent so they survive any re-render
+  const [photoUris, setPhotoUris] = useState<Record<number, string | 'error'>>({});
 
   useEffect(() => {
     if (!id) return;
@@ -143,6 +84,38 @@ export default function IncidentDetail() {
       .catch(() => setError('Could not load incident. Check your connection.'))
       .finally(() => setLoading(false));
   }, [id]);
+
+  // Once incident is loaded, fetch all photo bytes and store as data URIs
+  useEffect(() => {
+    if (!incident) return;
+    const allIds = [
+      ...incident.photos,
+      ...incident.patients.flatMap((p) => p.photos),
+    ].map((p) => p.id);
+
+    allIds.forEach(async (photoId) => {
+      try {
+        const token = await SecureStore.getItemAsync('auth_token');
+        const res = await fetch(`${BASE_URL}/api/photos/${photoId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) {
+          setPhotoUris((prev) => ({ ...prev, [photoId]: 'error' }));
+          return;
+        }
+        const buffer = await res.arrayBuffer();
+        const bytes = new Uint8Array(buffer);
+        const chunks: string[] = [];
+        for (let i = 0; i < bytes.byteLength; i += 8192) {
+          chunks.push(String.fromCharCode(...(bytes.slice(i, i + 8192) as unknown as number[])));
+        }
+        const base64 = btoa(chunks.join(''));
+        setPhotoUris((prev) => ({ ...prev, [photoId]: `data:image/jpeg;base64,${base64}` }));
+      } catch {
+        setPhotoUris((prev) => ({ ...prev, [photoId]: 'error' }));
+      }
+    });
+  }, [incident]);
 
   if (loading) {
     return (
@@ -252,9 +225,31 @@ export default function IncidentDetail() {
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Photos ({allPhotos.length})</Text>
             <View style={styles.photoGrid}>
-              {allPhotos.map((photo) => (
-                <AuthPhoto key={photo.id} photoId={photo.id} />
-              ))}
+              {allPhotos.map((photo) => {
+                const uri = photoUris[photo.id];
+                if (uri === 'error') {
+                  return (
+                    <View key={photo.id} style={photoStyles.placeholder}>
+                      <Text style={{ fontSize: 24 }}>🖼️</Text>
+                    </View>
+                  );
+                }
+                if (!uri) {
+                  return (
+                    <View key={photo.id} style={photoStyles.placeholder}>
+                      <ActivityIndicator size="small" color="#dc2626" />
+                    </View>
+                  );
+                }
+                return (
+                  <Image
+                    key={photo.id}
+                    source={{ uri }}
+                    style={photoStyles.thumb}
+                    resizeMode="cover"
+                  />
+                );
+              })}
             </View>
           </View>
         )}
@@ -276,6 +271,14 @@ function Row({ label, value }: { label: string; value: string | number }) {
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
+
+const photoStyles = StyleSheet.create({
+  placeholder: {
+    width: '47%', aspectRatio: 4 / 3, backgroundColor: '#f3f4f6',
+    borderRadius: 10, justifyContent: 'center', alignItems: 'center',
+  },
+  thumb: { width: '47%', aspectRatio: 4 / 3, borderRadius: 10 },
+});
 
 const styles = StyleSheet.create({
   safe:      { flex: 1, backgroundColor: '#f3f4f6' },
