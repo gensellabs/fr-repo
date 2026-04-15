@@ -60,12 +60,32 @@ interface FullIncident {
 // ─── Auth photo component ─────────────────────────────────────────────────────
 
 function AuthPhoto({ photoId }: { photoId: number }) {
-  const [token, setToken] = useState<string | null>(null);
-  const [error, setError] = useState(false);
+  const [dataUri, setDataUri] = useState<string | null>(null);
+  const [error, setError]     = useState(false);
 
   useEffect(() => {
-    SecureStore.getItemAsync('auth_token').then(setToken);
-  }, []);
+    let active = true;
+    (async () => {
+      try {
+        const token = await SecureStore.getItemAsync('auth_token');
+        const res = await fetch(`${BASE_URL}/api/photos/${photoId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) { if (active) setError(true); return; }
+        const buffer = await res.arrayBuffer();
+        const bytes  = new Uint8Array(buffer);
+        const chunks: string[] = [];
+        for (let i = 0; i < bytes.byteLength; i += 8192) {
+          chunks.push(String.fromCharCode(...(bytes.slice(i, i + 8192) as unknown as number[])));
+        }
+        const base64 = btoa(chunks.join(''));
+        if (active) setDataUri(`data:image/jpeg;base64,${base64}`);
+      } catch {
+        if (active) setError(true);
+      }
+    })();
+    return () => { active = false; };
+  }, [photoId]);
 
   if (error) {
     return (
@@ -74,7 +94,7 @@ function AuthPhoto({ photoId }: { photoId: number }) {
       </View>
     );
   }
-  if (!token) {
+  if (!dataUri) {
     return (
       <View style={photoStyles.placeholder}>
         <ActivityIndicator size="small" color="#dc2626" />
@@ -83,7 +103,7 @@ function AuthPhoto({ photoId }: { photoId: number }) {
   }
   return (
     <Image
-      source={{ uri: `${BASE_URL}/api/photos/${photoId}`, headers: { Authorization: `Bearer ${token}` } }}
+      source={{ uri: dataUri }}
       style={photoStyles.thumb}
       resizeMode="cover"
       onError={() => setError(true)}
