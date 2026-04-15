@@ -39,22 +39,6 @@ app.use('/api/hierarchy', hierarchyRouter);
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok', ts: new Date() }));
 
-// ─── One-time photo migration endpoint (remove after use) ─────────────────────
-app.post('/api/admin/migrate-photo-paths', async (req, res) => {
-  const secret = process.env.MIGRATE_SECRET;
-  if (!secret || req.headers['x-migrate-secret'] !== secret) {
-    res.status(403).json({ error: 'Forbidden' });
-    return;
-  }
-  const { prisma } = await import('./lib/prisma');
-  const result = await (prisma as any).$executeRaw`
-    UPDATE incident_photos
-    SET    "storagePath" = 'photos/' || "storagePath"
-    WHERE  "storagePath" NOT LIKE 'photos/%'
-  `;
-  res.json({ updated: result });
-});
-
 // ─── Error handling ───────────────────────────────────────────────────────────
 app.use(notFound);
 app.use(errorHandler);
