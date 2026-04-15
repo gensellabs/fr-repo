@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, ScrollView, Image, StyleSheet,
   ActivityIndicator,
@@ -6,6 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useNavigation } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
+import * as FileSystem from 'expo-file-system';
 import { api } from '../../services/api';
 import { COLOUR_CODE_STYLES } from '@firstresponders/shared';
 
@@ -68,6 +69,7 @@ export default function IncidentDetail() {
 
   // Photo URIs keyed by photo ID — stored in parent so they survive any re-render
   const [photoUris, setPhotoUris] = useState<Record<number, string | 'error'>>({});
+  const photoLoadStarted = useRef(false);
 
   useEffect(() => {
     if (!id) return;
@@ -85,33 +87,46 @@ export default function IncidentDetail() {
       .finally(() => setLoading(false));
   }, [id]);
 
-  // Once incident is loaded, fetch all photo bytes and store as data URIs
+  // Once incident is loaded, download each photo to device cache and store local URI
   useEffect(() => {
-    if (!incident) return;
+    if (!incident || photoLoadStarted.current) return;
+    photoLoadStarted.current = true;
+
     const allIds = [
       ...incident.photos,
       ...incident.patients.flatMap((p) => p.photos),
     ].map((p) => p.id);
 
+    console.log(`[Photos] Loading ${allIds.length} photo(s):`, allIds);
+
     allIds.forEach(async (photoId) => {
       try {
         const token = await SecureStore.getItemAsync('auth_token');
-        const res = await fetch(`${BASE_URL}/api/photos/${photoId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) {
-          setPhotoUris((prev) => ({ ...prev, [photoId]: 'error' }));
+        const localUri = `${FileSystem.cacheDirectory}photo_${photoId}.jpg`;
+
+        // Use cached file if already downloaded
+        const info = await FileSystem.getInfoAsync(localUri);
+        if (info.exists) {
+          console.log(`[Photos] Cache hit: photo ${photoId}`);
+          setPhotoUris((prev) => ({ ...prev, [photoId]: localUri }));
           return;
         }
-        const buffer = await res.arrayBuffer();
-        const bytes = new Uint8Array(buffer);
-        const chunks: string[] = [];
-        for (let i = 0; i < bytes.byteLength; i += 8192) {
-          chunks.push(String.fromCharCode(...(bytes.slice(i, i + 8192) as unknown as number[])));
+
+        console.log(`[Photos] Downloading photo ${photoId}`);
+        const result = await FileSystem.downloadAsync(
+          `${BASE_URL}/api/photos/${photoId}`,
+          localUri,
+          { headers: { Authorization: `Bearer ${token ?? ''}` } },
+        );
+        console.log(`[Photos] Done photo ${photoId}, status=${result.status}`);
+
+        if (result.status === 200) {
+          setPhotoUris((prev) => ({ ...prev, [photoId]: result.uri }));
+        } else {
+          setPhotoUris((prev) => ({ ...prev, [photoId]: 'error' }));
         }
-        const base64 = btoa(chunks.join(''));
-        setPhotoUris((prev) => ({ ...prev, [photoId]: `data:image/jpeg;base64,${base64}` }));
-      } catch {
+      } catch (e) {
+        console.log(`[Photos] Error photo ${photoId}:`, e);
         setPhotoUris((prev) => ({ ...prev, [photoId]: 'error' }));
       }
     });
