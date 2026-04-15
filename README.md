@@ -5,6 +5,17 @@ Mobile (iOS + Android via Expo) + Web (React PWA) + Backend (Node.js + PostgreSQ
 
 ---
 
+## Production Deployment
+
+| Service | URL |
+|---|---|
+| Backend API | `https://firstresponders-api.onrender.com` |
+| Web App | Render static site (same account) |
+| Database | Render PostgreSQL |
+| Photo Storage | Cloudflare R2 object storage |
+
+---
+
 ## Prerequisites
 
 - Node.js 18+
@@ -30,13 +41,16 @@ cp packages/backend/.env.example packages/backend/.env
 # Edit .env and set:
 #   DATABASE_URL="postgresql://USER:PASSWORD@localhost:5432/firstresponders"
 #   JWT_SECRET="your-long-random-secret"
+#   R2_ENDPOINT="https://<account>.r2.cloudflarestorage.com"
+#   R2_ACCESS_KEY_ID="..."
+#   R2_SECRET_ACCESS_KEY="..."
+#   R2_BUCKET_NAME="..."
 ```
 
 ### 3. Create database + run migrations + seed data
 
 ```bash
 cd packages/backend
-# Run schema SQL (prisma migrate dev not used — see prisma.config.ts)
 npx prisma generate
 DATABASE_URL="postgresql://USER@localhost:5432/firstresponders" ts-node prisma/seed.ts
 ```
@@ -61,7 +75,7 @@ npm run dev:web
 
 ```bash
 cd packages/mobile
-npx expo start
+npx expo start --clear
 # Scan QR code with Expo Go (iOS/Android)
 # Or press 'i' for iOS simulator / 'a' for Android emulator
 ```
@@ -69,9 +83,12 @@ npx expo start
 Set the API URL for mobile:
 ```bash
 # packages/mobile/.env (create this file)
-EXPO_PUBLIC_API_URL=http://YOUR_LOCAL_IP:3001
-# Use your machine's local IP (not localhost) so the device can reach it
+EXPO_PUBLIC_API_URL=https://firstresponders-api.onrender.com
+# For local dev use your machine's local IP (not localhost):
+# EXPO_PUBLIC_API_URL=http://YOUR_LOCAL_IP:3001
 ```
+
+> **Note:** Always start Expo with `--clear` after changing `.env` variables — Metro caches `EXPO_PUBLIC_*` values.
 
 ---
 
@@ -110,8 +127,11 @@ CountrySysAdmin:  sysadmin.za@firstresponders.app /  CountryAdmin@2025!
 | `DATABASE_URL` | PostgreSQL connection string | `postgresql://postgres:pw@localhost:5432/firstresponders` |
 | `JWT_SECRET` | Secret for signing JWT tokens | Any long random string |
 | `PORT` | API port | `3001` |
-| `UPLOAD_DIR` | Directory for photo uploads | `./uploads` |
-| `NODE_ENV` | Environment | `development` |
+| `NODE_ENV` | Environment | `development` or `production` |
+| `R2_ENDPOINT` | Cloudflare R2 endpoint URL | `https://<account>.r2.cloudflarestorage.com` |
+| `R2_ACCESS_KEY_ID` | R2 access key | — |
+| `R2_SECRET_ACCESS_KEY` | R2 secret key | — |
+| `R2_BUCKET_NAME` | R2 bucket name | — |
 
 ### Web (`packages/web/.env` — optional)
 | Variable | Description |
@@ -134,14 +154,18 @@ firstresponders/
 │   ├── backend/         Express API, Prisma ORM, PostgreSQL
 │   │   ├── prisma/      Schema, seed, prisma.config.ts
 │   │   └── src/
-│   │       ├── lib/     username.ts, prisma.ts
+│   │       ├── lib/     r2.ts, prisma.ts, username.ts
 │   │       ├── routes/  auth, lovs, incidents, admin, hierarchy, photos
 │   │       └── scripts/ backfill-usernames.ts
 │   ├── mobile/          Expo (React Native) iOS + Android app
+│   │   └── app/
+│   │       ├── (auth)/  select-responder.tsx
+│   │       ├── (tabs)/  new-incident, history, admin
+│   │       └── incident/[id].tsx  (read-only detail view)
 │   └── web/             React + Vite PWA (desktop + browser)
 ├── docs/
-│   ├── FirstResponders_BRS.docx          Business Requirements Specification (v2.0)
-│   └── FirstResponders_Development_Log.docx  Development Log (v2.0)
+│   ├── FirstResponders_BRS.docx          Business Requirements Specification
+│   └── FirstResponders_Development_Log.docx  Development Log
 ```
 
 ---
@@ -160,7 +184,9 @@ firstresponders/
 | Inline LOV add | ✓ | ✓ |
 | Photo capture + GPS tag | ✓ | — |
 | Offline save + sync | ✓ | — |
-| Incident history | ✓ (read-only) | ✓ |
+| Incident history list | ✓ | ✓ |
+| Incident detail view | ✓ (read-only, with photos) | ✓ |
+| Photo display (authenticated) | ✓ | ✓ |
 | CSV export | — | ✓ |
 | LOV admin (CRUD) | — | ✓ |
 | Location hierarchy manager | — | ✓ |
@@ -168,9 +194,8 @@ firstresponders/
 | Stats dashboard | — | ✓ |
 | Org self-registration | — | ✓ (public) |
 | Org approval workflow | — | ✓ (CountrySysAdmin) |
-| User management (roles) | — | ✓ |
+| User management (roles + mobile) | — | ✓ |
 | Country / Province filters | — | ✓ (admin roles) |
-| Username visibility | — | ✓ (SUPER/COUNTRY admin only) |
 
 ---
 
@@ -201,9 +226,41 @@ Example:  Bianca Engels, ZAF, +27829401774  →  elszaf774
 
 ---
 
+## Photo Storage (Cloudflare R2)
+
+Photos are stored in Cloudflare R2 under the key `photos/<filename>`.
+
+**Serving photos:**
+- Web (non-mobile): bytes streamed directly from R2 via `GET /api/photos/:id`
+- Mobile: `expo-file-system/legacy` downloads the photo with auth header to the device cache; local file URI used for display. Cached on first load.
+
+**Uploading photos:**
+- `POST /api/incidents/:id/photos` — multipart/form-data with lat/lng/alt fields
+- Stored in R2; path saved in `IncidentPhoto.storagePath`
+
+**R2 client config (`packages/backend/src/lib/r2.ts`):**
+```typescript
+new S3Client({
+  region: 'auto',
+  endpoint: process.env.R2_ENDPOINT,
+  credentials: { accessKeyId, secretAccessKey },
+})
+```
+
+---
+
+## Mobile Photo Display Notes
+
+React Native `Image` quirks encountered and resolved:
+- `width: '%'` inside `flexWrap: 'wrap'` renders with zero visible size — use explicit pixel dimensions calculated from `Dimensions.get('window').width`
+- `expo-file-system` v19: import from `expo-file-system/legacy` for `getInfoAsync`/`downloadAsync`
+- Photo loading state must live in the parent component, not child components — navigation state updates (e.g. `setOptions`) can remount children and cancel in-flight downloads
+
+---
+
 ## API Reference
 
-Base URL: `http://localhost:3001`
+Base URL: `https://firstresponders-api.onrender.com` (production) or `http://localhost:3001` (dev)
 
 All endpoints except `POST /api/auth/session`, `POST /api/auth/admin-login`, and `POST /api/hierarchy/org-registrations` require `Authorization: Bearer <token>`.
 
@@ -222,11 +279,12 @@ All endpoints except `POST /api/auth/session`, `POST /api/auth/admin-login`, and
 | `PUT` | `/api/incidents/:id` | Update incident |
 | `GET` | `/api/incidents/export/csv` | CSV export |
 | `POST` | `/api/incidents/:id/photos` | Upload geotagged photo |
-| `GET` | `/api/photos/:id` | Serve photo file |
+| `GET` | `/api/photos/:id` | Serve photo (streams bytes or presigned URL) |
+| `DELETE` | `/api/photos/:id` | Delete photo |
 | `GET` | `/api/admin/audit-log` | LOV change history (admin) |
 | `GET` | `/api/admin/stats` | Monthly summary stats |
 | `GET` | `/api/admin/users` | List responders (SysAdmin) |
-| `PATCH` | `/api/admin/users/:id/role` | Update responder role (SysAdmin) |
+| `PATCH` | `/api/admin/users/:id/role` | Update responder role/mobile/email (SysAdmin) |
 | `GET` | `/api/hierarchy/countries` | Countries |
 | `GET` | `/api/hierarchy/provinces` | Provinces |
 | `GET` | `/api/hierarchy/districts` | Districts |
@@ -242,18 +300,25 @@ LOV tables: `call_types`, `reasons`, `areas`, `locations`, `transports`, `hospit
 
 ## Database Migration Notes
 
-Prisma `migrate dev` is not used (incompatible with `prisma.config.ts` adapter setup). All schema changes are applied via raw SQL then `npx prisma generate`:
+`prisma migrate dev` doesn't work with `prisma.config.ts`. Apply schema changes via raw SQL then regenerate:
 
 ```bash
 psql "$DATABASE_URL" -c "ALTER TABLE lov_responders ADD COLUMN ..."
 npx prisma generate
 ```
 
-## Future: Migration to Oracle OCI
+Backfill script for usernames:
+```bash
+DATABASE_URL="postgresql://Admin@localhost:5432/firstresponders" \
+  npx ts-node src/scripts/backfill-usernames.ts
+```
 
-1. Update `packages/backend/prisma/schema.prisma` datasource provider to `oracle`
-2. Install Oracle Prisma adapter when available
-3. Update `DATABASE_URL` to Oracle connection string
-4. Run `npx prisma migrate deploy`
+---
 
-No application code changes required — all DB access goes through Prisma.
+## Future Work
+
+- Email infrastructure for temp password delivery to new GROUP_SYSADMIN accounts
+- Province and District administration panels
+- PDF incident report generation
+- Push notifications for new incident assignments
+- Offline sync (WatermelonDB) for mobile
