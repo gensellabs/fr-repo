@@ -262,6 +262,8 @@ export default function IncidentDetail() {
                     source={{ uri }}
                     style={photoStyles.thumb}
                     resizeMode="cover"
+                    onLoad={() => console.log(`[Photos] displayed ${photo.id}`)}
+                    onError={(e) => console.log(`[Photos] Image error ${photo.id}:`, e.nativeEvent.error, 'uri=', uri?.slice(0, 60))}
                   />
                 );
               })}
