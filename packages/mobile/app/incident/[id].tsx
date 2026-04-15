@@ -98,14 +98,7 @@ function AuthPhoto({ photoId }: { photoId: number }) {
       </View>
     );
   }
-  return (
-    <Image
-      source={{ uri: photoUri }}
-      style={photoStyles.thumb}
-      resizeMode="cover"
-      onError={() => setError(true)}
-    />
-  );
+  return <Image source={{ uri: photoUri }} style={photoStyles.thumb} resizeMode="cover" />;
 }
 
 const photoStyles = StyleSheet.create({
