@@ -290,9 +290,9 @@ function Row({ label, value }: { label: string; value: string | number }) {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 // Explicit pixel dimensions — percentage widths on Image inside flexWrap are unreliable in RN
-const SCREEN_W   = Dimensions.get('window').width;
-const PHOTO_W    = Math.floor((SCREEN_W - 24 - 32 - 10) / 2); // content padding + card padding + gap
-const PHOTO_H    = Math.floor(PHOTO_W * 3 / 4);
+const SCREEN_W = Dimensions.get('window').width;
+const PHOTO_W  = SCREEN_W - 24 - 32; // full card width (content padding 12×2 + card padding 16×2)
+const PHOTO_H  = Math.floor(PHOTO_W * 3 / 4);
 
 const photoStyles = StyleSheet.create({
   placeholder: {
@@ -337,5 +337,5 @@ const styles = StyleSheet.create({
   },
   drugName:  { fontSize: 14, color: '#374151', fontWeight: '600' },
   drugDose:  { fontSize: 14, color: '#6b7280' },
-  photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 4 },
+  photoGrid: { gap: 10, marginTop: 4 },
 });
