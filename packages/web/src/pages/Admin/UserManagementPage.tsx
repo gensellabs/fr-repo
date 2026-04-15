@@ -55,7 +55,7 @@ export function UserManagementPage() {
   async function saveMobile(user: UserRow) {
     setSaving(user.id);
     try {
-      await apiClient.updateUserContact(user.id, { mobile: mobileValue });
+      await apiClient.updateUserRole(user.id, { mobile: mobileValue });
       setUsers((prev) => prev.map((u) => u.id === user.id ? { ...u, mobile: mobileValue || null } : u));
       setEditingMobile(null);
     } catch {

@@ -93,10 +93,8 @@ export const apiClient = {
     isAdmin: boolean; isSysAdmin: boolean; isActive: boolean;
     organisation?: { id: number; name: string; country?: { id: number; name: string }; province?: { id: number; name: string } } | null;
   }[]>('GET', '/api/admin/users'),
-  updateUserRole: (id: number, data: { isAdmin?: boolean; isSysAdmin?: boolean; isActive?: boolean }) =>
+  updateUserRole: (id: number, data: { isAdmin?: boolean; isSysAdmin?: boolean; isActive?: boolean; mobile?: string; email?: string }) =>
     request<unknown>('PATCH', `/api/admin/users/${id}/role`, data),
-  updateUserContact: (id: number, data: { mobile?: string; email?: string }) =>
-    request<unknown>('PATCH', `/api/admin/users/${id}/contact`, data),
 
   // Hierarchy (SuperAdmin / CountrySysAdmin)
   getCountries: (all?: boolean) => request<unknown[]>('GET', `/api/hierarchy/countries${all ? '/all' : ''}`),

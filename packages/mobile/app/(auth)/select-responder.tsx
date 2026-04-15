@@ -26,8 +26,14 @@ export default function SelectResponder() {
     try {
       await login(username.trim().toLowerCase(), pin);
       router.replace('/(tabs)/new-incident');
-    } catch {
-      setError('Invalid username or PIN. Please try again.');
+    } catch (e: any) {
+      if (e?.statusCode === 401) {
+        setError('Invalid username or PIN. Please try again.');
+      } else if (e?.statusCode >= 400) {
+        setError(`Server error (${e.statusCode}). Please try again.`);
+      } else {
+        setError('Cannot reach server. Check your internet connection.');
+      }
     } finally {
       setLoading(false);
     }
