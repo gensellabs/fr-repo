@@ -173,7 +173,7 @@ export default function NewIncident() {
     : (lovs['areas_nested'] ?? []).flatMap((a) => (a as { locations?: LovOption[] }).locations ?? []);
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={['left', 'right', 'bottom']}>
       {/* Step indicator */}
       <View style={styles.stepBar}>
         {STEPS.map((s) => (
@@ -182,7 +182,7 @@ export default function NewIncident() {
       </View>
       <Text style={styles.stepLabel}>{step}</Text>
 
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
 
         {/* ── Step 1: Incident Header ── */}
         {step === 'Incident' && (
@@ -565,7 +565,7 @@ const styles = StyleSheet.create({
   stepDotDone: { backgroundColor: '#fca5a5' },
   stepLabel: { textAlign: 'center', fontSize: 13, color: '#6b7280', paddingBottom: 4, backgroundColor: '#fff' },
   scroll: { flex: 1 },
-  content: { padding: 16, paddingBottom: 32 },
+  content: { padding: 16, paddingBottom: 80 },
   section: { gap: 12 },
   dateRow: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: '#fff', borderRadius: 10, padding: 14, borderWidth: 1, borderColor: '#e5e7eb' },
   dateText: { fontSize: 15, fontWeight: '600', color: '#374151' },

@@ -4,6 +4,7 @@ import {
   ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { api } from '../../services/api';
 import { COLOUR_CODE_STYLES } from '@firstresponders/shared';
 
@@ -18,6 +19,7 @@ interface IncidentSummary {
 }
 
 export default function History() {
+  const router = useRouter();
   const [incidents, setIncidents] = useState<IncidentSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -47,7 +49,7 @@ export default function History() {
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={['left', 'right', 'bottom']}>
       <Text style={styles.count}>{total} incidents total</Text>
       <FlatList
         data={incidents}
@@ -64,7 +66,11 @@ export default function History() {
           const codeStyle = worstCode ? COLOUR_CODE_STYLES[worstCode as keyof typeof COLOUR_CODE_STYLES] : null;
 
           return (
-            <View style={styles.card}>
+            <TouchableOpacity
+              style={styles.card}
+              onPress={() => router.push(`/incident/${item.id}`)}
+              activeOpacity={0.7}
+            >
               {codeStyle && <View style={[styles.codeBar, { backgroundColor: codeStyle.bg }]} />}
               <View style={styles.cardContent}>
                 <View style={styles.cardHeader}>
@@ -80,7 +86,8 @@ export default function History() {
                   <Text style={styles.meta}>👥 {item.responders.map((r) => r.responder.value).join(', ')}</Text>
                 </View>
               </View>
-            </View>
+              <Text style={styles.chevron}>›</Text>
+            </TouchableOpacity>
           );
         }}
         ListEmptyComponent={
@@ -94,9 +101,10 @@ export default function History() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#f9fafb' },
   count: { fontSize: 13, color: '#6b7280', textAlign: 'center', paddingVertical: 8 },
-  list: { padding: 12 },
+  list: { padding: 12, paddingBottom: 80 },
   card: {
     flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#fff',
     borderRadius: 12,
     marginBottom: 10,
@@ -115,5 +123,6 @@ const styles = StyleSheet.create({
   location: { fontSize: 14, color: '#374151', marginTop: 2 },
   cardMeta: { flexDirection: 'row', gap: 12, marginTop: 8, flexWrap: 'wrap' },
   meta: { fontSize: 12, color: '#6b7280' },
-  empty: { textAlign: 'center', color: '#9ca3af', marginTop: 48, fontSize: 16 },
+  empty:   { textAlign: 'center', color: '#9ca3af', marginTop: 48, fontSize: 16 },
+  chevron: { fontSize: 22, color: '#9ca3af', alignSelf: 'center', paddingHorizontal: 8 },
 });

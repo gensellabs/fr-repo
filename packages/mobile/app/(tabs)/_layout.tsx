@@ -45,17 +45,16 @@ export default function TabsLayout() {
           headerTitle: 'Incident History',
         }}
       />
-      {isAdmin && (
-        <Tabs.Screen
-          name="admin"
-          options={{
-            title: 'Admin',
-            tabBarLabel: 'Admin',
-            tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 22 }}>⚙️</Text>,
-            headerTitle: 'Admin',
-          }}
-        />
-      )}
+      <Tabs.Screen
+        name="admin"
+        options={{
+          title: 'Admin',
+          tabBarLabel: 'Admin',
+          tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 22 }}>⚙️</Text>,
+          headerTitle: 'Admin',
+          href: isAdmin ? undefined : null,
+        }}
+      />
     </Tabs>
   );
 }
