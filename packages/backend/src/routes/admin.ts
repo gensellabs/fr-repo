@@ -160,4 +160,36 @@ router.patch('/users/:id/role', requireAuth, requireSysAdmin, async (req: Reques
   res.json(user);
 });
 
+// ─── PATCH /api/admin/users/:id/contact  (update mobile / email) ─────────────
+router.patch('/users/:id/contact', requireAuth, requireSysAdmin, async (req: Request, res: Response) => {
+  const id = parseInt(req.params.id, 10);
+  const { mobile, email } = req.body as { mobile?: string; email?: string };
+
+  // GROUP_SYSADMIN: only manage their own org
+  if (req.auth?.role === 'GROUP_SYSADMIN') {
+    const target = await prisma.lovResponder.findUnique({ where: { id }, select: { organisationId: true } });
+    if (!target || target.organisationId !== req.auth.organisationId) {
+      res.status(403).json({ error: 'Access denied' });
+      return;
+    }
+  }
+
+  const data: Record<string, string | null> = {};
+  if (mobile !== undefined) data.mobile = mobile.trim() || null;
+  if (email  !== undefined) data.email  = email.trim()  || null;
+
+  if (Object.keys(data).length === 0) {
+    res.status(400).json({ error: 'No valid fields to update' });
+    return;
+  }
+
+  const user = await prisma.lovResponder.update({
+    where: { id },
+    data,
+    select: { id: true, value: true, firstName: true, surname: true, email: true, mobile: true, isAdmin: true, isSysAdmin: true, isActive: true, username: true },
+  });
+
+  res.json(user);
+});
+
 export default router;

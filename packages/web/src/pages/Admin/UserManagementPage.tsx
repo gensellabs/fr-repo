@@ -30,6 +30,8 @@ export function UserManagementPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<number | null>(null);
   const [error, setError]   = useState<string | null>(null);
+  const [editingMobile, setEditingMobile] = useState<number | null>(null);
+  const [mobileValue, setMobileValue]     = useState('');
 
   // Filters (SUPER_ADMIN / COUNTRY_SYSADMIN only)
   const [filterCountry,  setFilterCountry]  = useState('');
@@ -49,6 +51,19 @@ export function UserManagementPage() {
   }
 
   useEffect(() => { load(); }, []);
+
+  async function saveMobile(user: UserRow) {
+    setSaving(user.id);
+    try {
+      await apiClient.updateUserContact(user.id, { mobile: mobileValue });
+      setUsers((prev) => prev.map((u) => u.id === user.id ? { ...u, mobile: mobileValue || null } : u));
+      setEditingMobile(null);
+    } catch {
+      alert('Failed to update mobile number. Please try again.');
+    } finally {
+      setSaving(null);
+    }
+  }
 
   async function toggle(user: UserRow, field: 'isAdmin' | 'isSysAdmin' | 'isActive') {
     setSaving(user.id);
@@ -151,7 +166,36 @@ export function UserManagementPage() {
                   </td>
                 )}
                 <td style={{ ...td, color: '#6b7280', fontSize: 13 }}>{user.email ?? '—'}</td>
-                <td style={{ ...td, color: '#6b7280', fontSize: 13 }}>{user.mobile ?? '—'}</td>
+                <td style={{ ...td, color: '#6b7280', fontSize: 13 }}>
+                  {editingMobile === user.id ? (
+                    <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                      <input
+                        autoFocus
+                        style={{ border: '1.5px solid #dc2626', borderRadius: 6, padding: '3px 8px', fontSize: 13, width: 130 }}
+                        value={mobileValue}
+                        onChange={(e) => setMobileValue(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') saveMobile(user); if (e.key === 'Escape') setEditingMobile(null); }}
+                        placeholder="+27821234567"
+                      />
+                      <button onClick={() => saveMobile(user)} disabled={saving === user.id}
+                        style={{ fontSize: 12, padding: '3px 8px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 5, cursor: 'pointer' }}>
+                        Save
+                      </button>
+                      <button onClick={() => setEditingMobile(null)}
+                        style={{ fontSize: 12, padding: '3px 8px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 5, cursor: 'pointer' }}>
+                        ✕
+                      </button>
+                    </span>
+                  ) : (
+                    <span
+                      title="Click to edit mobile"
+                      style={{ cursor: 'pointer', borderBottom: '1px dashed #d1d5db' }}
+                      onClick={() => { setEditingMobile(user.id); setMobileValue(user.mobile ?? ''); }}
+                    >
+                      {user.mobile ?? '—'}
+                    </span>
+                  )}
+                </td>
                 {canSeeOrgCols && <td style={{ ...td, fontSize: 13 }}>{user.organisation?.name ?? '—'}</td>}
                 {canSeeOrgCols && <td style={{ ...td, fontSize: 13 }}>{user.organisation?.country?.name ?? '—'}</td>}
                 {canSeeOrgCols && <td style={{ ...td, fontSize: 13 }}>{user.organisation?.province?.name ?? '—'}</td>}
