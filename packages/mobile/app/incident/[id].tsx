@@ -6,7 +6,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useNavigation } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
-import * as FileSystem from 'expo-file-system';
 import { api } from '../../services/api';
 import { COLOUR_CODE_STYLES } from '@firstresponders/shared';
 
@@ -61,32 +60,23 @@ interface FullIncident {
 // ─── Auth photo component ─────────────────────────────────────────────────────
 
 function AuthPhoto({ photoId }: { photoId: number }) {
-  const [localUri, setLocalUri] = useState<string | null>(null);
-  const [error, setError] = useState(false);
+  const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const [error, setError]       = useState(false);
 
   useEffect(() => {
     let active = true;
     (async () => {
       try {
         const token = await SecureStore.getItemAsync('auth_token');
-        const dest = `${FileSystem.cacheDirectory}photo_${photoId}.jpg`;
-        const info = await FileSystem.getInfoAsync(dest);
-        if (info.exists) {
-          if (active) setLocalUri(dest);
-          return;
-        }
-        const result = await FileSystem.downloadAsync(
-          `${BASE_URL}/api/photos/${photoId}`,
-          dest,
-          { headers: { Authorization: `Bearer ${token}` } },
-        );
-        if (result.status !== 200) {
-          // Clean up the error-body file so it doesn't get cached
-          await FileSystem.deleteAsync(dest, { idempotent: true });
-          if (active) setError(true);
-          return;
-        }
-        if (active) setLocalUri(result.uri);
+        const res = await fetch(`${BASE_URL}/api/photos/${photoId}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: 'application/json',
+          },
+        });
+        if (!res.ok) { if (active) setError(true); return; }
+        const { url } = await res.json() as { url: string };
+        if (active) setPhotoUri(url);
       } catch {
         if (active) setError(true);
       }
@@ -101,14 +91,14 @@ function AuthPhoto({ photoId }: { photoId: number }) {
       </View>
     );
   }
-  if (!localUri) {
+  if (!photoUri) {
     return (
       <View style={photoStyles.placeholder}>
         <ActivityIndicator size="small" color="#dc2626" />
       </View>
     );
   }
-  return <Image source={{ uri: localUri }} style={photoStyles.thumb} resizeMode="cover" />;
+  return <Image source={{ uri: photoUri }} style={photoStyles.thumb} resizeMode="cover" />;
 }
 
 const photoStyles = StyleSheet.create({

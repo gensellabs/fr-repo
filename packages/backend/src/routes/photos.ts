@@ -1,6 +1,7 @@
 import { prisma } from '../lib/prisma';
 import { Router, Request, Response } from 'express';
 import { GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Readable } from 'stream';
 import { requireAuth } from '../middleware/auth';
 import { r2, R2_BUCKET } from '../lib/r2';
@@ -41,7 +42,21 @@ router.get('/:id', requireAuth, async (req: Request, res: Response) => {
     }
   }
 
-  // ── Stream from R2 ──────────────────────────────────────────────────────
+  // ── Presigned URL or stream ───────────────────────────────────────────────
+  // If client requests JSON (mobile app), return a short-lived presigned URL.
+  // Otherwise stream the bytes directly (web / curl).
+  const wantsJson = req.headers.accept?.includes('application/json');
+
+  if (wantsJson) {
+    const url = await getSignedUrl(
+      r2,
+      new GetObjectCommand({ Bucket: R2_BUCKET, Key: photo.storagePath }),
+      { expiresIn: 3600 },
+    );
+    res.json({ url });
+    return;
+  }
+
   const result = await r2.send(new GetObjectCommand({
     Bucket: R2_BUCKET,
     Key: photo.storagePath,
