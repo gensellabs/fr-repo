@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, ScrollView, Image, StyleSheet,
-  ActivityIndicator,
+  ActivityIndicator, Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useNavigation } from 'expo-router';
@@ -289,12 +289,17 @@ function Row({ label, value }: { label: string; value: string | number }) {
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
+// Explicit pixel dimensions — percentage widths on Image inside flexWrap are unreliable in RN
+const SCREEN_W   = Dimensions.get('window').width;
+const PHOTO_W    = Math.floor((SCREEN_W - 24 - 32 - 10) / 2); // content padding + card padding + gap
+const PHOTO_H    = Math.floor(PHOTO_W * 3 / 4);
+
 const photoStyles = StyleSheet.create({
   placeholder: {
-    width: '47%', aspectRatio: 4 / 3, backgroundColor: '#f3f4f6',
+    width: PHOTO_W, height: PHOTO_H, backgroundColor: '#f3f4f6',
     borderRadius: 10, justifyContent: 'center', alignItems: 'center',
   },
-  thumb: { width: '47%', aspectRatio: 4 / 3, borderRadius: 10 },
+  thumb: { width: PHOTO_W, height: PHOTO_H, borderRadius: 10 },
 });
 
 const styles = StyleSheet.create({
