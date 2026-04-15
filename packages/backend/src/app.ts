@@ -48,7 +48,7 @@ app.post('/api/admin/migrate-photo-paths', async (req, res) => {
   }
   const { prisma } = await import('./lib/prisma');
   const result = await (prisma as any).$executeRaw`
-    UPDATE "IncidentPhoto"
+    UPDATE incident_photos
     SET    "storagePath" = 'photos/' || "storagePath"
     WHERE  "storagePath" NOT LIKE 'photos/%'
   `;
