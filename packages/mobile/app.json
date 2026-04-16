@@ -28,28 +28,52 @@
       },
       "package": "com.firstresponders.app",
       "permissions": [
-        "CAMERA",
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION",
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE"
+        "android.permission.CAMERA",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.RECORD_AUDIO"
       ]
+    },
+    "platforms": ["ios", "android"],
+    "updates": {
+      "url": "https://u.expo.dev/9b81636d-15bd-469e-9eef-cd269fbd40e0",
+      "enabled": true,
+      "fallbackToCacheTimeout": 0,
+      "channel": "production"
+    },
+    "runtimeVersion": {
+      "policy": "sdkVersion"
     },
     "plugins": [
       "expo-router",
       "expo-secure-store",
       [
         "expo-camera",
-        { "cameraPermission": "Allow FirstResponders to access your camera." }
+        {
+          "cameraPermission": "Allow FirstResponders to access your camera."
+        }
       ],
       [
         "expo-location",
-        { "locationWhenInUsePermission": "Allow FirstResponders to access your location." }
+        {
+          "locationWhenInUsePermission": "Allow FirstResponders to access your location."
+        }
       ],
       [
         "expo-image-picker",
-        { "photosPermission": "Allow FirstResponders to access your photos." }
+        {
+          "photosPermission": "Allow FirstResponders to access your photos."
+        }
       ]
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "9b81636d-15bd-469e-9eef-cd269fbd40e0"
+      }
+    },
+    "owner": "fr-expogo"
   }
 }
