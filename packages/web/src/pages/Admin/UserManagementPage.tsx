@@ -56,8 +56,8 @@ export function UserManagementPage() {
     setSaving(user.id);
     try {
       await apiClient.updateUserRole(user.id, { mobile: mobileValue });
-      setUsers((prev) => prev.map((u) => u.id === user.id ? { ...u, mobile: mobileValue || null } : u));
       setEditingMobile(null);
+      await load(); // re-fetch so all screens reflect the latest DB state
     } catch {
       alert('Failed to update mobile number. Please try again.');
     } finally {
@@ -69,7 +69,7 @@ export function UserManagementPage() {
     setSaving(user.id);
     try {
       await apiClient.updateUserRole(user.id, { [field]: !user[field] });
-      setUsers((prev) => prev.map((u) => u.id === user.id ? { ...u, [field]: !user[field] } : u));
+      await load(); // re-fetch so all screens reflect the latest DB state
     } catch {
       alert('Failed to update user role. Please try again.');
     } finally {

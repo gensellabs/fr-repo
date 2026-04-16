@@ -10,7 +10,8 @@ export function AppLayout({ children, auth }: Props) {
 
   function handleLogout() {
     logout();
-    navigate('/');
+    // Force full page reload so all hook instances re-read localStorage (which is now empty)
+    window.location.href = '/';
   }
 
   return (
