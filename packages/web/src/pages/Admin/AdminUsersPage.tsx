@@ -14,13 +14,16 @@ interface AdminUser {
 interface SelectItem { id: number; name: string }
 
 export function AdminUsersPage() {
-  const [users, setUsers]       = useState<AdminUser[]>([]);
+  const [users, setUsers]         = useState<AdminUser[]>([]);
   const [countries, setCountries] = useState<SelectItem[]>([]);
-  const [loading, setLoading]   = useState(false);
-  const [addMode, setAddMode]   = useState(false);
-  const [saving, setSaving]     = useState(false);
-  const [form, setForm]         = useState<Record<string, string>>({ role: 'COUNTRY_SYSADMIN' });
-  const [editId, setEditId]     = useState<number | null>(null);
+  const [loading, setLoading]     = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [addMode, setAddMode]     = useState(false);
+  const [saving, setSaving]       = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [form, setForm]           = useState<Record<string, string>>({ role: 'COUNTRY_SYSADMIN' });
+  // editId kept for future edit support
+  // const [editId, setEditId]    = useState<number | null>(null);
 
   useEffect(() => {
     load();
@@ -29,29 +32,63 @@ export function AdminUsersPage() {
 
   async function load() {
     setLoading(true);
-    try { setUsers(await apiClient.getAdminUsers() as AdminUser[]); }
-    finally { setLoading(false); }
+    setLoadError(null);
+    try {
+      setUsers(await apiClient.getAdminUsers() as AdminUser[]);
+    } catch {
+      setLoadError('Failed to load admin users. Please refresh the page.');
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function handleAdd() {
-    if (!form.name || !form.email || !form.password) {
-      alert('Name, email and password are required');
-      return;
+    setFormError(null);
+
+    // Validate required fields
+    if (!form.name?.trim()) { setFormError('Full name is required.'); return; }
+    if (!form.email?.trim()) { setFormError('Email address is required.'); return; }
+    if (!form.password) { setFormError('Password is required.'); return; }
+    if (form.role === 'COUNTRY_SYSADMIN' && !form.countryId) {
+      setFormError('Please select a country for Country SysAdmin.'); return;
     }
+
     setSaving(true);
     try {
-      await apiClient.createAdminUser({ ...form, countryId: form.countryId ? Number(form.countryId) : undefined });
-      setAddMode(false); setForm({ role: 'COUNTRY_SYSADMIN' });
-      load();
-    } catch (e: unknown) { alert((e as Error).message); }
-    finally { setSaving(false); }
+      await apiClient.createAdminUser({
+        name:      form.name.trim(),
+        email:     form.email.trim(),
+        mobile:    form.mobile?.trim() || undefined,
+        password:  form.password,
+        role:      form.role,
+        countryId: form.countryId ? Number(form.countryId) : undefined,
+      });
+      setAddMode(false);
+      setForm({ role: 'COUNTRY_SYSADMIN' });
+      setFormError(null);
+      await load();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to create admin user.';
+      setFormError(msg.includes('Unique constraint') ? 'An account with that email already exists.' : msg);
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function handleToggle(id: number, isActive: boolean) {
     try {
       await apiClient.updateAdminUser(id, { isActive: !isActive });
-      load();
-    } catch (e: unknown) { alert((e as Error).message); }
+      await load();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to update user.';
+      setLoadError(msg);
+    }
+  }
+
+  function openAdd() {
+    setFormError(null);
+    setForm({ role: 'COUNTRY_SYSADMIN' });
+    setAddMode(true);
   }
 
   const roleColour: Record<string, string> = {
@@ -66,29 +103,73 @@ export function AdminUsersPage() {
           <h2 style={pageTitle}>Admin Users</h2>
           <p style={subtitle}>Manage SuperAdmin and CountrySysAdmin accounts. SuperAdmin only.</p>
         </div>
-        <button style={addBtn} onClick={() => { setAddMode(true); setForm({ role: 'COUNTRY_SYSADMIN' }); }}>+ Add Admin User</button>
+        <button style={addBtn} onClick={openAdd}>+ Add Admin User</button>
       </div>
 
       {addMode && (
         <div style={formBox}>
-          <input placeholder="Full name" value={form.name ?? ''} onChange={(e) => setForm({ ...form, name: e.target.value })} style={inp} />
-          <input type="email" placeholder="Email" value={form.email ?? ''} onChange={(e) => setForm({ ...form, email: e.target.value })} style={inp} />
-          <input type="tel" placeholder="Mobile (optional)" value={form.mobile ?? ''} onChange={(e) => setForm({ ...form, mobile: e.target.value })} style={inp} />
-          <input type="password" placeholder="Password" value={form.password ?? ''} onChange={(e) => setForm({ ...form, password: e.target.value })} style={inp} />
-          <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} style={inp}>
+          <input
+            placeholder="Full name *"
+            value={form.name ?? ''}
+            onChange={(e) => { setFormError(null); setForm({ ...form, name: e.target.value }); }}
+            style={{ ...inp, borderColor: formError?.includes('name') ? '#dc2626' : '#d1d5db' }}
+            autoComplete="off"
+          />
+          <input
+            type="email"
+            placeholder="Email *"
+            value={form.email ?? ''}
+            onChange={(e) => { setFormError(null); setForm({ ...form, email: e.target.value }); }}
+            style={{ ...inp, borderColor: formError?.includes('Email') || formError?.includes('email') ? '#dc2626' : '#d1d5db' }}
+            autoComplete="off"
+          />
+          <input
+            type="tel"
+            placeholder="Mobile (optional)"
+            value={form.mobile ?? ''}
+            onChange={(e) => setForm({ ...form, mobile: e.target.value })}
+            style={inp}
+          />
+          <input
+            type="password"
+            placeholder="Password *"
+            value={form.password ?? ''}
+            onChange={(e) => { setFormError(null); setForm({ ...form, password: e.target.value }); }}
+            style={{ ...inp, borderColor: formError?.includes('Password') || formError?.includes('password') ? '#dc2626' : '#d1d5db' }}
+            autoComplete="new-password"
+          />
+          <select
+            value={form.role}
+            onChange={(e) => setForm({ ...form, role: e.target.value, countryId: '' })}
+            style={inp}
+          >
             <option value="COUNTRY_SYSADMIN">Country SysAdmin</option>
             <option value="SUPER_ADMIN">Super Admin</option>
           </select>
           {form.role === 'COUNTRY_SYSADMIN' && (
-            <select value={form.countryId ?? ''} onChange={(e) => setForm({ ...form, countryId: e.target.value })} style={inp}>
-              <option value="">— Select country —</option>
+            <select
+              value={form.countryId ?? ''}
+              onChange={(e) => { setFormError(null); setForm({ ...form, countryId: e.target.value }); }}
+              style={{ ...inp, borderColor: formError?.includes('country') ? '#dc2626' : '#d1d5db' }}
+            >
+              <option value="">— Select country *—</option>
               {countries.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           )}
-          <button style={saveBtn} onClick={handleAdd} disabled={saving}>{saving ? 'Saving…' : 'Create'}</button>
-          <button style={cancelBtn} onClick={() => setAddMode(false)}>Cancel</button>
+          <button style={saveBtn} onClick={handleAdd} disabled={saving}>
+            {saving ? 'Saving…' : 'Create'}
+          </button>
+          <button style={cancelBtn} onClick={() => { setAddMode(false); setFormError(null); }}>
+            Cancel
+          </button>
+          {/* Inline error — shown below buttons so it's unmissable */}
+          {formError && (
+            <div style={errorBanner}>⚠ {formError}</div>
+          )}
         </div>
       )}
+
+      {loadError && <p style={{ color: '#dc2626', marginBottom: 12 }}>{loadError}</p>}
 
       {loading ? (
         <p style={{ color: '#9ca3af', textAlign: 'center', marginTop: 40 }}>Loading…</p>
@@ -114,7 +195,7 @@ export function AdminUsersPage() {
                 <td style={td}>{u.mobile ?? '—'}</td>
                 <td style={td}>
                   <span style={{ ...rolePill, backgroundColor: `${roleColour[u.role] ?? '#6b7280'}22`, color: roleColour[u.role] ?? '#6b7280' }}>
-                    {u.role.replace('_', ' ')}
+                    {u.role.replace(/_/g, ' ')}
                   </span>
                 </td>
                 <td style={td}>{u.country?.name ?? '—'}</td>
@@ -129,6 +210,13 @@ export function AdminUsersPage() {
                 </td>
               </tr>
             ))}
+            {users.length === 0 && !loading && (
+              <tr>
+                <td colSpan={8} style={{ ...td, textAlign: 'center', color: '#9ca3af', padding: '32px 0' }}>
+                  No admin users found.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       )}
@@ -152,3 +240,4 @@ const cancelBtn: React.CSSProperties = { padding: '7px 14px', backgroundColor: '
 const editBtn: React.CSSProperties   = { padding: '5px 12px', backgroundColor: 'transparent', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 12, cursor: 'pointer', color: '#374151' };
 const statusDot: React.CSSProperties = { display: 'inline-block', width: 10, height: 10, borderRadius: 5 };
 const rolePill: React.CSSProperties  = { fontSize: 11, fontWeight: 700, borderRadius: 6, padding: '3px 10px' };
+const errorBanner: React.CSSProperties = { width: '100%', marginTop: 4, padding: '8px 12px', backgroundColor: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 8, fontSize: 13, fontWeight: 500 };
