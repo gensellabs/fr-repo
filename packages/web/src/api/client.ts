@@ -124,6 +124,20 @@ export const apiClient = {
   updateOrganisation: (id: number, data: unknown) => request<unknown>('PUT', `/api/hierarchy/organisations/${id}`, data),
   deleteOrganisation: (id: number) => request<unknown>('DELETE', `/api/hierarchy/organisations/${id}`),
 
+  // Areas (geographic: LovArea with districtId, no organisationId)
+  getHierarchyAreas: (districtId?: number, countryId?: number) => {
+    const params = new URLSearchParams();
+    if (districtId) params.set('districtId', String(districtId));
+    if (countryId)  params.set('countryId',  String(countryId));
+    const qs = params.toString() ? `?${params}` : '';
+    return request<unknown[]>('GET', `/api/hierarchy/areas${qs}`);
+  },
+  createHierarchyArea: (data: unknown) => request<unknown>('POST', '/api/hierarchy/areas', data),
+  updateHierarchyArea: (id: number, data: unknown) => request<unknown>('PUT', `/api/hierarchy/areas/${id}`, data),
+
+  // Group Admins (CountrySysAdmin creates GROUP_SYSADMIN / GROUP_ADMIN for an org)
+  createGroupAdmin: (data: unknown) => request<unknown>('POST', '/api/hierarchy/group-admins', data),
+
   getAdminUsers: () => request<unknown[]>('GET', '/api/hierarchy/admin-users'),
   createAdminUser: (data: unknown) => request<unknown>('POST', '/api/hierarchy/admin-users', data),
   updateAdminUser: (id: number, data: unknown) => request<unknown>('PUT', `/api/hierarchy/admin-users/${id}`, data),

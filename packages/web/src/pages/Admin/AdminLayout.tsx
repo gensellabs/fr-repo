@@ -60,6 +60,7 @@ export function AdminLayout() {
           <>
             <p style={{ ...sidebarTitle, marginTop: 20 }}>Country SysAdmin</p>
             <NavLink to="/admin/organisations" style={navLink}>Organisations</NavLink>
+            <NavLink to="/admin/hierarchy"     style={navLink}>Geographic Hierarchy</NavLink>
           </>
         )}
 
@@ -67,7 +68,6 @@ export function AdminLayout() {
         {isSuperAdmin && (
           <>
             <p style={{ ...sidebarTitle, marginTop: 20 }}>Super Admin</p>
-            <NavLink to="/admin/hierarchy"  style={navLink}>Geographic Hierarchy</NavLink>
             <NavLink to="/admin/admin-users" style={navLink}>Admin Users</NavLink>
           </>
         )}

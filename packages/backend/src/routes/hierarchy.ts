@@ -8,12 +8,14 @@ const resend = new Resend(process.env.RESEND_API_KEY);
  *
  * Public  GET  /api/hierarchy/countries
  * Public  GET  /api/hierarchy/provinces?countryId=
- * Public  GET  /api/hierarchy/districts?provinceId=
+ * Public  GET  /api/hierarchy/districts?provinceId=&countryId=
+ * Public  GET  /api/hierarchy/areas?districtId=&countryId=
  * Public  GET  /api/hierarchy/organisations?districtId=
  *
- * SuperAdmin  POST/PUT/DELETE  countries, provinces, districts
- * SuperAdmin  POST/PUT         admin-users
- * CountrySysAdmin+  POST/PUT   organisations, org-registrations (approve/reject)
+ * SuperAdmin           POST/PUT  countries
+ * CountrySysAdmin+     POST/PUT  provinces, districts, areas (scoped to own country)
+ * CountrySysAdmin+     POST/PUT  organisations, org-registrations, group-admins
+ * SuperAdmin           POST/PUT  admin-users
  */
 
 import { Router, Request, Response } from 'express';
@@ -27,7 +29,6 @@ import {
 } from '../middleware/auth';
 
 const router = Router();
-
 
 // ══════════════════════════════════════════════════════════════════════════════
 // COUNTRIES
@@ -67,7 +68,7 @@ router.put('/countries/:id', requireAuth, requireSuperAdmin, async (req: Request
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
-// PROVINCES
+// PROVINCES  (SuperAdmin: full; CountrySysAdmin: own country only)
 // ══════════════════════════════════════════════════════════════════════════════
 
 router.get('/provinces', async (req, res) => {
@@ -80,24 +81,32 @@ router.get('/provinces', async (req, res) => {
   res.json(rows);
 });
 
-router.post('/provinces', requireAuth, requireSuperAdmin, async (req: Request, res: Response) => {
+router.post('/provinces', requireAuth, requireCountrySysAdmin, async (req: Request, res: Response) => {
   const { name, countryId } = req.body as { name: string; countryId: number };
   if (!name || !countryId) { res.status(400).json({ error: 'name and countryId required' }); return; }
-  const row = await prisma.province.create({ data: { name, countryId } });
+  // CountrySysAdmin may only create provinces in their own country
+  if (req.auth?.role === 'COUNTRY_SYSADMIN' && Number(countryId) !== req.auth.countryId) {
+    res.status(403).json({ error: 'You can only create provinces in your own country' }); return;
+  }
+  const row = await prisma.province.create({ data: { name, countryId: Number(countryId) } });
   res.status(201).json(row);
 });
 
-router.put('/provinces/:id', requireAuth, requireSuperAdmin, async (req: Request, res: Response) => {
+router.put('/provinces/:id', requireAuth, requireCountrySysAdmin, async (req: Request, res: Response) => {
+  const id = parseInt(req.params.id, 10);
+  if (req.auth?.role === 'COUNTRY_SYSADMIN') {
+    const existing = await prisma.province.findUnique({ where: { id }, select: { countryId: true } });
+    if (!existing || existing.countryId !== req.auth.countryId) {
+      res.status(403).json({ error: 'Province is not in your country' }); return;
+    }
+  }
   const { name, isActive } = req.body;
-  const row = await prisma.province.update({
-    where: { id: parseInt(req.params.id, 10) },
-    data: { name, isActive },
-  });
+  const row = await prisma.province.update({ where: { id }, data: { name, isActive } });
   res.json(row);
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
-// DISTRICTS
+// DISTRICTS  (SuperAdmin: full; CountrySysAdmin: own country only)
 // ══════════════════════════════════════════════════════════════════════════════
 
 router.get('/districts', async (req, res) => {
@@ -115,19 +124,89 @@ router.get('/districts', async (req, res) => {
   res.json(rows);
 });
 
-router.post('/districts', requireAuth, requireSuperAdmin, async (req: Request, res: Response) => {
+router.post('/districts', requireAuth, requireCountrySysAdmin, async (req: Request, res: Response) => {
   const { name, provinceId } = req.body as { name: string; provinceId: number };
   if (!name || !provinceId) { res.status(400).json({ error: 'name and provinceId required' }); return; }
-  const row = await prisma.district.create({ data: { name, provinceId } });
+  // CountrySysAdmin: verify province belongs to their country
+  if (req.auth?.role === 'COUNTRY_SYSADMIN') {
+    const province = await prisma.province.findUnique({ where: { id: Number(provinceId) }, select: { countryId: true } });
+    if (!province || province.countryId !== req.auth.countryId) {
+      res.status(403).json({ error: 'Province is not in your country' }); return;
+    }
+  }
+  const row = await prisma.district.create({ data: { name, provinceId: Number(provinceId) } });
   res.status(201).json(row);
 });
 
-router.put('/districts/:id', requireAuth, requireSuperAdmin, async (req: Request, res: Response) => {
+router.put('/districts/:id', requireAuth, requireCountrySysAdmin, async (req: Request, res: Response) => {
+  const id = parseInt(req.params.id, 10);
+  if (req.auth?.role === 'COUNTRY_SYSADMIN') {
+    const existing = await prisma.district.findUnique({ where: { id }, include: { province: { select: { countryId: true } } } });
+    if (!existing || existing.province.countryId !== req.auth.countryId) {
+      res.status(403).json({ error: 'District is not in your country' }); return;
+    }
+  }
   const { name, isActive } = req.body;
-  const row = await prisma.district.update({
-    where: { id: parseInt(req.params.id, 10) },
-    data: { name, isActive },
+  const row = await prisma.district.update({ where: { id }, data: { name, isActive } });
+  res.json(row);
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// AREAS  (CountrySysAdmin+: geographic areas tied to a district)
+// ══════════════════════════════════════════════════════════════════════════════
+
+router.get('/areas', async (req, res) => {
+  const districtId = req.query.districtId ? parseInt(req.query.districtId as string, 10) : undefined;
+  const countryId  = req.query.countryId  ? parseInt(req.query.countryId  as string, 10) : undefined;
+  const rows = await prisma.lovArea.findMany({
+    where: {
+      isActive: true,
+      organisationId: null, // geographic areas only (not org-specific LOV areas)
+      ...(districtId ? { districtId } : {}),
+      ...(countryId  ? { district: { province: { countryId } } } : {}),
+    },
+    orderBy: { value: 'asc' },
+    include: {
+      district: {
+        select: { name: true, province: { select: { name: true, country: { select: { name: true } } } } },
+      },
+    },
   });
+  res.json(rows);
+});
+
+router.post('/areas', requireAuth, requireCountrySysAdmin, async (req: Request, res: Response) => {
+  const { value, districtId } = req.body as { value: string; districtId: number };
+  if (!value || !districtId) { res.status(400).json({ error: 'value and districtId required' }); return; }
+  if (req.auth?.role === 'COUNTRY_SYSADMIN') {
+    const district = await prisma.district.findUnique({
+      where: { id: Number(districtId) },
+      include: { province: { select: { countryId: true } } },
+    });
+    if (!district || district.province.countryId !== req.auth.countryId) {
+      res.status(403).json({ error: 'District is not in your country' }); return;
+    }
+  }
+  const row = await prisma.lovArea.create({
+    data: { value, districtId: Number(districtId), organisationId: null },
+    include: { district: { select: { name: true, province: { select: { name: true, country: { select: { name: true } } } } } } },
+  });
+  res.status(201).json(row);
+});
+
+router.put('/areas/:id', requireAuth, requireCountrySysAdmin, async (req: Request, res: Response) => {
+  const id = parseInt(req.params.id, 10);
+  if (req.auth?.role === 'COUNTRY_SYSADMIN') {
+    const existing = await prisma.lovArea.findUnique({
+      where: { id },
+      include: { district: { include: { province: { select: { countryId: true } } } } },
+    });
+    if (!existing || !existing.district || existing.district.province.countryId !== req.auth.countryId) {
+      res.status(403).json({ error: 'Area is not in your country' }); return;
+    }
+  }
+  const { value, isActive } = req.body;
+  const row = await prisma.lovArea.update({ where: { id }, data: { value, isActive } });
   res.json(row);
 });
 
@@ -151,6 +230,7 @@ router.get('/organisations', async (req, res) => {
       country:  { select: { name: true } },
       province: { select: { name: true } },
       district: { select: { name: true } },
+      area:     { select: { value: true } },
       _count:   { select: { responders: true, incidents: true } },
     },
   });
@@ -166,6 +246,7 @@ router.get('/organisations/all', requireAuth, requireCountrySysAdmin, async (req
       country:  { select: { name: true } },
       province: { select: { name: true } },
       district: { select: { name: true } },
+      area:     { select: { value: true } },
       _count:   { select: { responders: true, incidents: true } },
     },
   });
@@ -173,8 +254,8 @@ router.get('/organisations/all', requireAuth, requireCountrySysAdmin, async (req
 });
 
 router.post('/organisations', requireAuth, requireCountrySysAdmin, async (req: Request, res: Response) => {
-  const { name, countryId, provinceId, districtId } = req.body as {
-    name: string; countryId: number; provinceId: number; districtId: number;
+  const { name, countryId, provinceId, districtId, areaId } = req.body as {
+    name: string; countryId: number; provinceId: number; districtId: number; areaId?: number;
   };
   if (!name || !countryId || !provinceId || !districtId) {
     res.status(400).json({ error: 'name, countryId, provinceId, districtId required' });
@@ -185,22 +266,37 @@ router.post('/organisations', requireAuth, requireCountrySysAdmin, async (req: R
     return;
   }
   const row = await prisma.organisation.create({
-    data: { name, countryId, provinceId, districtId, approvedAt: new Date(), approvedById: req.auth?.adminUserId },
-    include: { country: { select: { name: true } }, province: { select: { name: true } }, district: { select: { name: true } } },
+    data: {
+      name, countryId, provinceId, districtId,
+      ...(areaId ? { areaId } : {}),
+      approvedAt: new Date(),
+      approvedById: req.auth?.adminUserId,
+    },
+    include: {
+      country:  { select: { name: true } },
+      province: { select: { name: true } },
+      district: { select: { name: true } },
+      area:     { select: { value: true } },
+    },
   });
   res.status(201).json(row);
 });
 
 router.put('/organisations/:id', requireAuth, requireCountrySysAdmin, async (req: Request, res: Response) => {
-  const { name, isActive, districtId, provinceId, countryId } = req.body;
+  const { name, isActive, districtId, provinceId, countryId, areaId } = req.body;
   if (name && name.length > 40) {
     res.status(400).json({ error: 'Organisation name must be 40 characters or fewer' });
     return;
   }
   const row = await prisma.organisation.update({
     where: { id: parseInt(req.params.id, 10) },
-    data: { name, isActive, districtId, provinceId, countryId },
-    include: { country: { select: { name: true } }, province: { select: { name: true } }, district: { select: { name: true } } },
+    data: { name, isActive, districtId, provinceId, countryId, areaId: areaId ?? null },
+    include: {
+      country:  { select: { name: true } },
+      province: { select: { name: true } },
+      district: { select: { name: true } },
+      area:     { select: { value: true } },
+    },
   });
   res.json(row);
 });
@@ -226,7 +322,49 @@ router.delete('/organisations/:id', requireAuth, requireCountrySysAdmin, async (
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
-// ADMIN USERS
+// GROUP ADMINS  (CountrySysAdmin+ creates GROUP_SYSADMIN / GROUP_ADMIN)
+// ══════════════════════════════════════════════════════════════════════════════
+
+router.post('/group-admins', requireAuth, requireCountrySysAdmin, async (req: Request, res: Response) => {
+  const { orgId, firstName, surname, email, mobile, password, role = 'GROUP_SYSADMIN' } = req.body as {
+    orgId: number; firstName: string; surname: string;
+    email: string; mobile?: string; password: string;
+    role?: 'GROUP_SYSADMIN' | 'GROUP_ADMIN';
+  };
+  if (!orgId || !firstName || !surname || !email || !password) {
+    res.status(400).json({ error: 'orgId, firstName, surname, email and password are required' }); return;
+  }
+  if (!['GROUP_SYSADMIN', 'GROUP_ADMIN'].includes(role)) {
+    res.status(400).json({ error: 'role must be GROUP_SYSADMIN or GROUP_ADMIN' }); return;
+  }
+  // CountrySysAdmin: verify org is in their country
+  const org = await prisma.organisation.findUnique({
+    where: { id: Number(orgId) },
+    include: { country: { select: { isoCode: true } } },
+  });
+  if (!org) { res.status(404).json({ error: 'Organisation not found' }); return; }
+  if (req.auth?.role === 'COUNTRY_SYSADMIN' && org.countryId !== req.auth.countryId) {
+    res.status(403).json({ error: 'Organisation is not in your country' }); return;
+  }
+  const username   = await generateUsername(firstName, surname, org.country.isoCode, mobile ?? null);
+  const passwordHash = await bcrypt.hash(password, 12);
+  const responder  = await prisma.lovResponder.create({
+    data: {
+      value: `${firstName} ${surname}`.trim(),
+      firstName, surname, email: email.toLowerCase(), mobile: mobile ?? null,
+      username, organisationId: Number(orgId),
+      role,
+      isAdmin:    true,
+      isSysAdmin: role === 'GROUP_SYSADMIN',
+      passwordHash,
+    },
+    select: { id: true, value: true, firstName: true, surname: true, email: true, username: true, role: true },
+  });
+  res.status(201).json(responder);
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ADMIN USERS  (SuperAdmin only)
 // ══════════════════════════════════════════════════════════════════════════════
 
 router.get('/admin-users', requireAuth, requireSuperAdmin, async (_req, res) => {

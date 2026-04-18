@@ -1,5 +1,5 @@
 /**
- * CountrySysAdmin+ — Organisation management + registration approvals
+ * CountrySysAdmin+ — Organisation management + registration approvals + group admin creation
  */
 import React, { useEffect, useState } from 'react';
 import { apiClient } from '../../api/client';
@@ -7,7 +7,7 @@ import { useAuth } from '../../hooks/useAuth';
 
 interface OrgRow {
   id: number; name: string; isActive: boolean;
-  country?: { name: string }; province?: { name: string }; district?: { name: string };
+  country?: { name: string }; province?: { name: string }; district?: { name: string }; area?: { value: string };
   registeredAt: string; approvedAt?: string;
   _count?: { responders: number; incidents: number };
 }
@@ -17,13 +17,14 @@ interface RegRow {
   contactMobile?: string; status: string; submittedAt: string; reviewNotes?: string;
 }
 
-interface SelectItem { id: number; name: string }
+interface SelectItem { id: number; name: string; value?: string }
 
 type Tab = 'organisations' | 'registrations';
 
 export function OrganisationsPage() {
   const { auth } = useAuth();
-  const isSuperAdmin = auth?.role === 'SUPER_ADMIN';
+  const isSuperAdmin     = auth?.role === 'SUPER_ADMIN';
+  const isCountryAdmin   = auth?.role === 'COUNTRY_SYSADMIN';
 
   const [tab, setTab]     = useState<Tab>('organisations');
   const [orgs, setOrgs]   = useState<OrgRow[]>([]);
@@ -33,19 +34,32 @@ export function OrganisationsPage() {
   const [countries, setCountries]   = useState<SelectItem[]>([]);
   const [provinces, setProvinces]   = useState<SelectItem[]>([]);
   const [districts, setDistricts]   = useState<SelectItem[]>([]);
+  const [areas,     setAreas]       = useState<SelectItem[]>([]);
 
   const [addMode, setAddMode] = useState(false);
   const [form, setForm]       = useState<Record<string, string>>({});
   const [saving, setSaving]   = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const [reviewId, setReviewId]   = useState<number | null>(null);
   const [reviewForm, setReviewForm] = useState<{ status: 'APPROVED' | 'REJECTED'; reviewNotes: string }>({ status: 'APPROVED', reviewNotes: '' });
   const [renameId, setRenameId]   = useState<number | null>(null);
   const [renameName, setRenameName] = useState('');
   const [approvalResult, setApprovalResult] = useState<{ orgName: string; adminName: string; adminEmail: string; tempPassword: string } | null>(null);
 
+  // Group Admin creation state
+  const [groupAdminOrgId, setGroupAdminOrgId] = useState<number | null>(null);
+  const [groupAdminOrgName, setGroupAdminOrgName] = useState('');
+  const [gaForm, setGaForm] = useState<Record<string, string>>({ role: 'GROUP_SYSADMIN' });
+  const [gaError, setGaError] = useState<string | null>(null);
+  const [gaResult, setGaResult] = useState<{ name: string; username: string; email: string } | null>(null);
+
   useEffect(() => { load(); }, [tab]);
   useEffect(() => {
     apiClient.getCountries().then((d) => setCountries(d as SelectItem[]));
+    // CountryAdmin: pre-load their country's provinces
+    if (isCountryAdmin && auth?.countryId) {
+      apiClient.getProvinces(auth.countryId).then((d) => setProvinces(d as SelectItem[]));
+    }
   }, []);
 
   async function load() {
@@ -59,20 +73,36 @@ export function OrganisationsPage() {
   async function loadProvinces(countryId: number) {
     const data = await apiClient.getProvinces(countryId) as SelectItem[];
     setProvinces(data);
+    setDistricts([]); setAreas([]);
   }
   async function loadDistricts(provinceId: number) {
     const data = await apiClient.getDistricts(provinceId) as SelectItem[];
     setDistricts(data);
+    setAreas([]);
+  }
+  async function loadAreas(districtId: number) {
+    const data = await apiClient.getHierarchyAreas(districtId) as { id: number; value: string }[];
+    setAreas(data.map((a) => ({ id: a.id, name: a.value })));
   }
 
   async function handleAdd() {
+    setFormError(null);
+    if (!form.name?.trim()) { setFormError('Organisation name is required.'); return; }
+    if (!form.districtId) { setFormError('Please select a district.'); return; }
     setSaving(true);
     try {
-      await apiClient.createOrganisation({ ...form, countryId: Number(form.countryId), provinceId: Number(form.provinceId), districtId: Number(form.districtId) });
+      await apiClient.createOrganisation({
+        name: form.name.trim(),
+        countryId:  Number(isCountryAdmin ? auth?.countryId : form.countryId),
+        provinceId: Number(form.provinceId),
+        districtId: Number(form.districtId),
+        ...(form.areaId ? { areaId: Number(form.areaId) } : {}),
+      });
       setAddMode(false); setForm({});
       load();
-    } catch (e: unknown) { alert((e as Error).message); }
-    finally { setSaving(false); }
+    } catch (e: unknown) {
+      setFormError((e as Error).message || 'Failed to create organisation.');
+    } finally { setSaving(false); }
   }
 
   async function handleToggle(id: number, isActive: boolean) {
@@ -125,6 +155,31 @@ export function OrganisationsPage() {
     finally { setSaving(false); }
   }
 
+  async function handleCreateGroupAdmin() {
+    setGaError(null);
+    if (!gaForm.firstName?.trim()) { setGaError('First name is required.'); return; }
+    if (!gaForm.surname?.trim())   { setGaError('Surname is required.'); return; }
+    if (!gaForm.email?.trim())     { setGaError('Email is required.'); return; }
+    if (!gaForm.password)          { setGaError('Password is required.'); return; }
+    setSaving(true);
+    try {
+      const result = await apiClient.createGroupAdmin({
+        orgId:     groupAdminOrgId,
+        firstName: gaForm.firstName.trim(),
+        surname:   gaForm.surname.trim(),
+        email:     gaForm.email.trim(),
+        mobile:    gaForm.mobile?.trim() || undefined,
+        password:  gaForm.password,
+        role:      gaForm.role,
+      }) as { value: string; username: string; email: string };
+      setGaResult({ name: result.value, username: result.username, email: result.email });
+      setGaForm({ role: 'GROUP_SYSADMIN' });
+    } catch (e: unknown) {
+      const msg = (e as Error).message ?? 'Failed to create group admin.';
+      setGaError(msg.includes('Unique constraint') ? 'An account with that email already exists.' : msg);
+    } finally { setSaving(false); }
+  }
+
   const pendingCount = regs.filter((r) => r.status === 'PENDING').length;
 
   return (
@@ -134,7 +189,11 @@ export function OrganisationsPage() {
           <h2 style={pageTitle}>Organisations</h2>
           <p style={subtitle}>Manage registered first responder groups.</p>
         </div>
-        {tab === 'organisations' && <button style={addBtn} onClick={() => { setAddMode(true); setForm({}); }}>+ Add Organisation</button>}
+        {tab === 'organisations' && (
+          <button style={addBtn} onClick={() => { setAddMode(true); setForm(isCountryAdmin ? {} : {}); setFormError(null); }}>
+            + Add Organisation
+          </button>
+        )}
       </div>
 
       <div style={tabs}>
@@ -149,21 +208,47 @@ export function OrganisationsPage() {
       {/* Add form */}
       {addMode && tab === 'organisations' && (
         <div style={formBox}>
-          <input placeholder="Organisation name (max 40 chars)" value={form.name ?? ''} onChange={(e) => setForm({ ...form, name: e.target.value })} style={{ ...inp, minWidth: 260 }} maxLength={40} />
-          <select value={form.countryId ?? ''} onChange={(e) => { setForm({ ...form, countryId: e.target.value, provinceId: '', districtId: '' }); loadProvinces(Number(e.target.value)); }} style={inp}>
-            <option value="">— Country —</option>
-            {countries.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-          <select value={form.provinceId ?? ''} onChange={(e) => { setForm({ ...form, provinceId: e.target.value, districtId: '' }); loadDistricts(Number(e.target.value)); }} style={inp} disabled={!form.countryId}>
-            <option value="">— Province —</option>
+          <input
+            placeholder="Organisation name (max 40 chars) *"
+            value={form.name ?? ''}
+            onChange={(e) => { setFormError(null); setForm({ ...form, name: e.target.value }); }}
+            style={{ ...inp, minWidth: 260, borderColor: formError?.includes('name') ? '#dc2626' : '#d1d5db' }}
+            maxLength={40}
+          />
+          {/* Country — auto-filled for CountryAdmin */}
+          {isSuperAdmin ? (
+            <select value={form.countryId ?? ''} onChange={(e) => {
+              setForm({ ...form, countryId: e.target.value, provinceId: '', districtId: '', areaId: '' });
+              loadProvinces(Number(e.target.value));
+            }} style={inp}>
+              <option value="">— Country *—</option>
+              {countries.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          ) : (
+            <span style={countryBadge}>{auth?.countryName ?? 'Your country'}</span>
+          )}
+          <select value={form.provinceId ?? ''} onChange={(e) => {
+            setForm({ ...form, provinceId: e.target.value, districtId: '', areaId: '' });
+            loadDistricts(Number(e.target.value));
+          }} style={inp} disabled={isSuperAdmin && !form.countryId}>
+            <option value="">— Province *—</option>
             {provinces.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
-          <select value={form.districtId ?? ''} onChange={(e) => setForm({ ...form, districtId: e.target.value })} style={inp} disabled={!form.provinceId}>
-            <option value="">— District —</option>
+          <select value={form.districtId ?? ''} onChange={(e) => {
+            setForm({ ...form, districtId: e.target.value, areaId: '' });
+            loadAreas(Number(e.target.value));
+          }} style={inp} disabled={!form.provinceId}>
+            <option value="">— District *—</option>
             {districts.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
           </select>
+          <select value={form.areaId ?? ''} onChange={(e) => setForm({ ...form, areaId: e.target.value })}
+            style={inp} disabled={!form.districtId}>
+            <option value="">— Area (optional) —</option>
+            {areas.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
           <button style={saveBtn} onClick={handleAdd} disabled={saving}>{saving ? 'Saving…' : 'Create'}</button>
-          <button style={cancelBtn} onClick={() => setAddMode(false)}>Cancel</button>
+          <button style={cancelBtn} onClick={() => { setAddMode(false); setFormError(null); }}>Cancel</button>
+          {formError && <div style={errBanner}>⚠ {formError}</div>}
         </div>
       )}
 
@@ -189,13 +274,13 @@ export function OrganisationsPage() {
         </div>
       )}
 
-      {/* Approval result modal — shown once after approving a registration */}
+      {/* Approval result modal */}
       {approvalResult && (
         <div style={modal}>
           <div style={modalCard}>
             <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>Organisation Approved</h3>
             <p style={{ fontSize: 14, color: '#6b7280', marginBottom: 16 }}>
-              <strong>{approvalResult.orgName}</strong> has been created. A GROUP_SYSADMIN account was set up for the contact person.
+              <strong>{approvalResult.orgName}</strong> has been created. A GROUP_SYSADMIN account was set up.
               Share these credentials securely — this password will not be shown again.
             </p>
             <div style={{ backgroundColor: '#f9fafb', borderRadius: 8, border: '1px solid #e5e7eb', padding: 14, fontSize: 14, lineHeight: 1.8 }}>
@@ -207,7 +292,6 @@ export function OrganisationsPage() {
                 </code>
               </div>
             </div>
-            <p style={{ fontSize: 12, color: '#9ca3af', marginTop: 10 }}>The GROUP_SYSADMIN can change their password after first login via the Responder LOV settings.</p>
             <button style={{ ...saveBtn, marginTop: 16, width: '100%' }} onClick={() => setApprovalResult(null)}>Done</button>
           </div>
         </div>
@@ -219,14 +303,74 @@ export function OrganisationsPage() {
           <div style={modalCard}>
             <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 14 }}>Review Registration</h3>
             <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
-              <button style={{ ...tabBtn, ...(reviewForm.status === 'APPROVED' ? { backgroundColor: '#16a34a', color: '#fff', borderColor: '#16a34a' } : {}) }} onClick={() => setReviewForm({ ...reviewForm, status: 'APPROVED' })}>✓ Approve</button>
-              <button style={{ ...tabBtn, ...(reviewForm.status === 'REJECTED' ? { backgroundColor: '#dc2626', color: '#fff', borderColor: '#dc2626' } : {}) }} onClick={() => setReviewForm({ ...reviewForm, status: 'REJECTED' })}>✕ Reject</button>
+              <button style={{ ...tabBtn, ...(reviewForm.status === 'APPROVED' ? { backgroundColor: '#16a34a', color: '#fff', borderColor: '#16a34a' } : {}) }}
+                onClick={() => setReviewForm({ ...reviewForm, status: 'APPROVED' })}>✓ Approve</button>
+              <button style={{ ...tabBtn, ...(reviewForm.status === 'REJECTED' ? { backgroundColor: '#dc2626', color: '#fff', borderColor: '#dc2626' } : {}) }}
+                onClick={() => setReviewForm({ ...reviewForm, status: 'REJECTED' })}>✕ Reject</button>
             </div>
-            <textarea placeholder="Notes (optional)" value={reviewForm.reviewNotes} onChange={(e) => setReviewForm({ ...reviewForm, reviewNotes: e.target.value })} style={{ ...inp, width: '100%', minHeight: 80, resize: 'vertical' }} />
+            <textarea placeholder="Notes (optional)" value={reviewForm.reviewNotes}
+              onChange={(e) => setReviewForm({ ...reviewForm, reviewNotes: e.target.value })}
+              style={{ ...inp, width: '100%', minHeight: 80, resize: 'vertical' }} />
             <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
               <button style={saveBtn} onClick={handleReview} disabled={saving}>{saving ? 'Saving…' : 'Submit'}</button>
               <button style={cancelBtn} onClick={() => setReviewId(null)}>Cancel</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Group Admin modal */}
+      {groupAdminOrgId !== null && !gaResult && (
+        <div style={modal}>
+          <div style={{ ...modalCard, width: 480 }}>
+            <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Create Group Admin</h3>
+            <p style={{ fontSize: 13, color: '#6b7280', marginBottom: 16 }}>
+              Creating admin for <strong>{groupAdminOrgName}</strong>
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <input placeholder="First name *" value={gaForm.firstName ?? ''} autoFocus
+                  onChange={(e) => { setGaError(null); setGaForm({ ...gaForm, firstName: e.target.value }); }}
+                  style={{ ...inp, flex: 1 }} autoComplete="off" />
+                <input placeholder="Surname *" value={gaForm.surname ?? ''}
+                  onChange={(e) => { setGaError(null); setGaForm({ ...gaForm, surname: e.target.value }); }}
+                  style={{ ...inp, flex: 1 }} autoComplete="off" />
+              </div>
+              <input type="email" placeholder="Email *" value={gaForm.email ?? ''}
+                onChange={(e) => { setGaError(null); setGaForm({ ...gaForm, email: e.target.value }); }}
+                style={inp} autoComplete="off" />
+              <input type="tel" placeholder="Mobile (optional)" value={gaForm.mobile ?? ''}
+                onChange={(e) => setGaForm({ ...gaForm, mobile: e.target.value })}
+                style={inp} />
+              <input type="password" placeholder="Password *" value={gaForm.password ?? ''}
+                onChange={(e) => { setGaError(null); setGaForm({ ...gaForm, password: e.target.value }); }}
+                style={inp} autoComplete="new-password" />
+              <select value={gaForm.role} onChange={(e) => setGaForm({ ...gaForm, role: e.target.value })} style={inp}>
+                <option value="GROUP_SYSADMIN">Group SysAdmin (can manage users + LOVs)</option>
+                <option value="GROUP_ADMIN">Group Admin (incident management only)</option>
+              </select>
+            </div>
+            {gaError && <div style={{ ...errBanner, marginTop: 10 }}>⚠ {gaError}</div>}
+            <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+              <button style={saveBtn} onClick={handleCreateGroupAdmin} disabled={saving}>{saving ? 'Creating…' : 'Create Admin'}</button>
+              <button style={cancelBtn} onClick={() => { setGroupAdminOrgId(null); setGaForm({ role: 'GROUP_SYSADMIN' }); setGaError(null); }}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Group Admin created result modal */}
+      {gaResult && (
+        <div style={modal}>
+          <div style={modalCard}>
+            <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>Group Admin Created</h3>
+            <div style={{ backgroundColor: '#f9fafb', borderRadius: 8, border: '1px solid #e5e7eb', padding: 14, fontSize: 14, lineHeight: 1.8 }}>
+              <div><span style={{ color: '#6b7280' }}>Name:</span> <strong>{gaResult.name}</strong></div>
+              <div><span style={{ color: '#6b7280' }}>Username:</span> <code style={{ backgroundColor: '#f3f4f6', borderRadius: 4, padding: '2px 6px', fontFamily: 'monospace', fontSize: 13 }}>{gaResult.username}</code></div>
+              <div><span style={{ color: '#6b7280' }}>Email:</span> <strong>{gaResult.email}</strong></div>
+            </div>
+            <p style={{ fontSize: 12, color: '#9ca3af', marginTop: 10 }}>Share the username and password with the new admin. They can log in at the admin portal.</p>
+            <button style={{ ...saveBtn, marginTop: 14, width: '100%' }} onClick={() => { setGaResult(null); setGroupAdminOrgId(null); load(); }}>Done</button>
           </div>
         </div>
       )}
@@ -242,30 +386,46 @@ export function OrganisationsPage() {
               <th style={{ ...th, textAlign: 'center' }}>Responders</th>
               <th style={{ ...th, textAlign: 'center' }}>Incidents</th>
               <th style={{ ...th, textAlign: 'center' }}>Active</th>
-              {isSuperAdmin && <th style={{ ...th, textAlign: 'right' }}>Actions</th>}
+              <th style={{ ...th, textAlign: 'right' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {orgs.map((org) => (
               <tr key={org.id} style={tr}>
                 <td style={td}><span style={{ fontWeight: 600 }}>{org.name}</span></td>
-                <td style={td}>{[org.country?.name, org.province?.name, org.district?.name].filter(Boolean).join(' › ')}</td>
+                <td style={td}>
+                  {[org.country?.name, org.province?.name, org.district?.name, org.area?.value].filter(Boolean).join(' › ')}
+                </td>
                 <td style={{ ...td, textAlign: 'center' }}>{org._count?.responders ?? 0}</td>
                 <td style={{ ...td, textAlign: 'center' }}>{org._count?.incidents ?? 0}</td>
                 <td style={{ ...td, textAlign: 'center' }}>
                   <span style={{ ...statusDot, backgroundColor: org.isActive ? '#16a34a' : '#d1d5db' }} />
                 </td>
-                {isSuperAdmin && (
-                  <td style={{ ...td, textAlign: 'right' }}>
-                    <button style={{ ...editBtn, marginRight: 6 }} onClick={() => { setRenameId(org.id); setRenameName(org.name); }}>Rename</button>
-                    <button style={{ ...editBtn, marginRight: 6, color: org.isActive ? '#dc2626' : '#16a34a' }} onClick={() => handleToggle(org.id, org.isActive)}>
+                <td style={{ ...td, textAlign: 'right' }}>
+                  <button style={{ ...editBtn, marginRight: 6 }}
+                    onClick={() => { setGroupAdminOrgId(org.id); setGroupAdminOrgName(org.name); setGaForm({ role: 'GROUP_SYSADMIN' }); setGaError(null); }}>
+                    + Admin
+                  </button>
+                  {isSuperAdmin && (
+                    <>
+                      <button style={{ ...editBtn, marginRight: 6 }} onClick={() => { setRenameId(org.id); setRenameName(org.name); }}>Rename</button>
+                      <button style={{ ...editBtn, marginRight: 6, color: org.isActive ? '#dc2626' : '#16a34a' }} onClick={() => handleToggle(org.id, org.isActive)}>
+                        {org.isActive ? 'Deactivate' : 'Activate'}
+                      </button>
+                      <button style={{ ...editBtn, color: '#dc2626', borderColor: '#fca5a5' }} onClick={() => handleDelete(org.id, org.name)}>Delete</button>
+                    </>
+                  )}
+                  {isCountryAdmin && (
+                    <button style={{ ...editBtn, color: org.isActive ? '#dc2626' : '#16a34a' }} onClick={() => handleToggle(org.id, org.isActive)}>
                       {org.isActive ? 'Deactivate' : 'Activate'}
                     </button>
-                    <button style={{ ...editBtn, color: '#dc2626', borderColor: '#fca5a5' }} onClick={() => handleDelete(org.id, org.name)}>Delete</button>
-                  </td>
-                )}
+                  )}
+                </td>
               </tr>
             ))}
+            {orgs.length === 0 && !loading && (
+              <tr><td colSpan={6} style={{ ...td, textAlign: 'center', color: '#9ca3af', padding: '32px 0' }}>No organisations found.</td></tr>
+            )}
           </tbody>
         </table>
       ) : (
@@ -303,6 +463,9 @@ export function OrganisationsPage() {
                 </td>
               </tr>
             ))}
+            {regs.length === 0 && !loading && (
+              <tr><td colSpan={5} style={{ ...td, textAlign: 'center', color: '#9ca3af', padding: '32px 0' }}>No registration requests.</td></tr>
+            )}
           </tbody>
         </table>
       )}
@@ -310,25 +473,27 @@ export function OrganisationsPage() {
   );
 }
 
-const toolbar: React.CSSProperties   = { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 16 };
-const pageTitle: React.CSSProperties = { fontSize: 24, fontWeight: 700 };
-const subtitle: React.CSSProperties  = { color: '#6b7280', fontSize: 14 };
-const tabs: React.CSSProperties      = { display: 'flex', gap: 8, marginBottom: 16 };
-const tabBtn: React.CSSProperties    = { padding: '8px 18px', borderRadius: 8, border: '1.5px solid #e5e7eb', background: '#fff', cursor: 'pointer', fontSize: 14, fontWeight: 500 };
-const tabActive: React.CSSProperties = { backgroundColor: '#dc2626', color: '#fff', borderColor: '#dc2626' };
-const formBox: React.CSSProperties   = { display: 'flex', gap: 10, alignItems: 'center', backgroundColor: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 10, padding: 14, marginBottom: 16, flexWrap: 'wrap' };
-const inp: React.CSSProperties       = { padding: '8px 10px', borderRadius: 8, border: '1.5px solid #d1d5db', fontSize: 14, minWidth: 160 };
-const table: React.CSSProperties     = { width: '100%', borderCollapse: 'collapse', backgroundColor: '#fff', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' };
-const thead: React.CSSProperties     = { backgroundColor: '#f3f4f6' };
-const th: React.CSSProperties        = { padding: '11px 14px', textAlign: 'left', fontSize: 13, fontWeight: 600, color: '#374151', borderBottom: '1px solid #e5e7eb' };
-const tr: React.CSSProperties        = { borderBottom: '1px solid #f3f4f6' };
-const td: React.CSSProperties        = { padding: '11px 14px', fontSize: 14, color: '#111827', verticalAlign: 'middle' };
-const addBtn: React.CSSProperties    = { padding: '9px 18px', backgroundColor: '#dc2626', color: '#fff', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer' };
-const saveBtn: React.CSSProperties   = { padding: '7px 14px', backgroundColor: '#dc2626', color: '#fff', border: 'none', borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: 'pointer' };
-const cancelBtn: React.CSSProperties = { padding: '7px 14px', backgroundColor: '#f3f4f6', color: '#374151', border: 'none', borderRadius: 7, fontSize: 13, cursor: 'pointer' };
-const editBtn: React.CSSProperties   = { padding: '5px 12px', backgroundColor: 'transparent', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 12, cursor: 'pointer', color: '#374151' };
-const statusDot: React.CSSProperties = { display: 'inline-block', width: 10, height: 10, borderRadius: 5 };
+const toolbar: React.CSSProperties    = { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 16 };
+const pageTitle: React.CSSProperties  = { fontSize: 24, fontWeight: 700 };
+const subtitle: React.CSSProperties   = { color: '#6b7280', fontSize: 14 };
+const tabs: React.CSSProperties       = { display: 'flex', gap: 8, marginBottom: 16 };
+const tabBtn: React.CSSProperties     = { padding: '8px 18px', borderRadius: 8, border: '1.5px solid #e5e7eb', background: '#fff', cursor: 'pointer', fontSize: 14, fontWeight: 500 };
+const tabActive: React.CSSProperties  = { backgroundColor: '#dc2626', color: '#fff', borderColor: '#dc2626' };
+const formBox: React.CSSProperties    = { display: 'flex', gap: 10, alignItems: 'center', backgroundColor: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 10, padding: 14, marginBottom: 16, flexWrap: 'wrap' };
+const inp: React.CSSProperties        = { padding: '8px 10px', borderRadius: 8, border: '1.5px solid #d1d5db', fontSize: 14, minWidth: 160 };
+const countryBadge: React.CSSProperties = { padding: '8px 12px', borderRadius: 8, backgroundColor: '#f3f4f6', color: '#374151', fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap' };
+const table: React.CSSProperties      = { width: '100%', borderCollapse: 'collapse', backgroundColor: '#fff', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' };
+const thead: React.CSSProperties      = { backgroundColor: '#f3f4f6' };
+const th: React.CSSProperties         = { padding: '11px 14px', textAlign: 'left', fontSize: 13, fontWeight: 600, color: '#374151', borderBottom: '1px solid #e5e7eb' };
+const tr: React.CSSProperties         = { borderBottom: '1px solid #f3f4f6' };
+const td: React.CSSProperties         = { padding: '11px 14px', fontSize: 14, color: '#111827', verticalAlign: 'middle' };
+const addBtn: React.CSSProperties     = { padding: '9px 18px', backgroundColor: '#dc2626', color: '#fff', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer' };
+const saveBtn: React.CSSProperties    = { padding: '7px 14px', backgroundColor: '#dc2626', color: '#fff', border: 'none', borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: 'pointer' };
+const cancelBtn: React.CSSProperties  = { padding: '7px 14px', backgroundColor: '#f3f4f6', color: '#374151', border: 'none', borderRadius: 7, fontSize: 13, cursor: 'pointer' };
+const editBtn: React.CSSProperties    = { padding: '5px 12px', backgroundColor: 'transparent', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 12, cursor: 'pointer', color: '#374151' };
+const statusDot: React.CSSProperties  = { display: 'inline-block', width: 10, height: 10, borderRadius: 5 };
 const statusPill: React.CSSProperties = { fontSize: 12, fontWeight: 700, borderRadius: 6, padding: '3px 10px' };
-const badge: React.CSSProperties     = { display: 'inline-block', marginLeft: 6, backgroundColor: '#dc2626', color: '#fff', borderRadius: 10, padding: '1px 7px', fontSize: 12, fontWeight: 700 };
-const modal: React.CSSProperties     = { position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 };
-const modalCard: React.CSSProperties = { backgroundColor: '#fff', borderRadius: 14, padding: 28, width: 420, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' };
+const badge: React.CSSProperties      = { display: 'inline-block', marginLeft: 6, backgroundColor: '#dc2626', color: '#fff', borderRadius: 10, padding: '1px 7px', fontSize: 12, fontWeight: 700 };
+const modal: React.CSSProperties      = { position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 };
+const modalCard: React.CSSProperties  = { backgroundColor: '#fff', borderRadius: 14, padding: 28, width: 420, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' };
+const errBanner: React.CSSProperties  = { width: '100%', padding: '8px 12px', backgroundColor: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 8, fontSize: 13, fontWeight: 500 };

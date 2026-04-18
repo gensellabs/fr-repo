@@ -87,6 +87,8 @@ model Organisation {
   province     Province  @relation(fields: [provinceId], references: [id])
   districtId   Int
   district     District  @relation(fields: [districtId], references: [id])
+  areaId       Int?
+  area         LovArea?  @relation("OrgInArea", fields: [areaId], references: [id])
   isActive     Boolean   @default(true)
   registeredAt DateTime  @default(now())
   approvedAt   DateTime?
@@ -94,7 +96,7 @@ model Organisation {
 
   responders LovResponder[]
   incidents  Incident[]
-  areas      LovArea[]
+  areas      LovArea[]      @relation("OrgLovAreas")
 
   @@map("organisations")
 }
@@ -167,7 +169,7 @@ model LovArea {
   id             Int           @id @default(autoincrement())
   value          String        @unique
   organisationId Int?
-  organisation   Organisation? @relation(fields: [organisationId], references: [id])
+  organisation   Organisation? @relation("OrgLovAreas", fields: [organisationId], references: [id])
   districtId     Int?
   district       District?     @relation(fields: [districtId], references: [id])
   isActive       Boolean       @default(true)
@@ -175,6 +177,7 @@ model LovArea {
   createdAt      DateTime      @default(now())
   createdBy      String?
   locations      LovLocation[]
+  orgInArea      Organisation[] @relation("OrgInArea")
 
   @@map("lov_areas")
 }
