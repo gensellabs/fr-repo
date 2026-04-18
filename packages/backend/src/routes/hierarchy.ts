@@ -2,7 +2,12 @@ import { prisma } from '../lib/prisma';
 import { generateUsername } from '../lib/username';
 import { Resend } from 'resend';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Lazy initialisation — avoids crash at module load if RESEND_API_KEY is not set
+function getResend() {
+  const key = process.env.RESEND_API_KEY;
+  if (!key) return null;
+  return new Resend(key);
+}
 /**
  * /api/hierarchy — Geographic & organisational hierarchy management
  *
@@ -497,7 +502,8 @@ router.put('/org-registrations/:id', requireAuth, requireCountrySysAdmin, async 
     });
 
     // Send temp password to the contact email
-    if (reg.contactEmail) {
+    const resend = getResend();
+    if (reg.contactEmail && resend) {
       await resend.emails.send({
         from: process.env.RESEND_FROM_EMAIL!,
         to: reg.contactEmail,

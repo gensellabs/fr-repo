@@ -94,10 +94,11 @@ router.get('/users', requireAuth, requireSysAdmin, async (req: Request, res: Res
   const isCountryAdmin = role === 'COUNTRY_SYSADMIN';
   const canSeeUsername = isSuperAdmin || isCountryAdmin;
 
-  // GROUP_SYSADMIN sees only their own org's responders
-  const where: Record<string, unknown> = role === 'GROUP_SYSADMIN'
-    ? { organisationId: req.auth?.organisationId }
-    : {};
+  // Scope by role
+  const where: Record<string, unknown> =
+    role === 'GROUP_SYSADMIN'    ? { organisationId: req.auth?.organisationId } :
+    role === 'COUNTRY_SYSADMIN'  ? { organisation: { countryId: req.auth?.countryId } } :
+    {}; // SUPER_ADMIN: see all
 
   const users = await prisma.lovResponder.findMany({
     where,

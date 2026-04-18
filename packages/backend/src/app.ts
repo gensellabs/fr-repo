@@ -11,8 +11,22 @@ import photosRouter from './routes/photos';
 import adminRouter from './routes/admin';
 import hierarchyRouter from './routes/hierarchy';
 import { errorHandler, notFound } from './middleware/errorHandler';
+import { prisma } from './lib/prisma';
 
 const app = express();
+
+// ─── Startup migrations (idempotent — safe to run on every deploy) ────────────
+async function runStartupMigrations() {
+  try {
+    await prisma.$executeRawUnsafe(
+      `ALTER TABLE organisations ADD COLUMN IF NOT EXISTS "areaId" INTEGER REFERENCES lov_areas(id)`
+    );
+    console.log('Startup migrations OK');
+  } catch (e) {
+    console.error('Startup migration warning:', e);
+  }
+}
+runStartupMigrations();
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
