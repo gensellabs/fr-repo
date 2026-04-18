@@ -102,7 +102,7 @@ router.get('/users', requireAuth, requireSysAdmin, async (req: Request, res: Res
 
   const users = await prisma.lovResponder.findMany({
     where,
-    orderBy: [{ organisation: { name: 'asc' } }, { sortOrder: 'asc' }],
+    orderBy: [{ sortOrder: 'asc' }, { value: 'asc' }],
     select: {
       id: true, value: true, firstName: true, surname: true,
       email: true, mobile: true,
