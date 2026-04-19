@@ -96,6 +96,7 @@ export declare const IncidentCreateSchema: z.ZodObject<{
     localId: z.ZodOptional<z.ZodString>;
     callTypeId: z.ZodOptional<z.ZodNullable<z.ZodNumber>>;
     locationId: z.ZodOptional<z.ZodNullable<z.ZodNumber>>;
+    locationText: z.ZodOptional<z.ZodNullable<z.ZodString>>;
     patientCount: z.ZodDefault<z.ZodNumber>;
     responderIds: z.ZodArray<z.ZodNumber, "many">;
     primaryResponderId: z.ZodNumber;
@@ -183,6 +184,7 @@ export declare const IncidentCreateSchema: z.ZodObject<{
     localId?: string | undefined;
     callTypeId?: number | null | undefined;
     locationId?: number | null | undefined;
+    locationText?: string | null | undefined;
     patients?: {
         patientNumber: number;
         drugs?: {
@@ -212,6 +214,7 @@ export declare const IncidentCreateSchema: z.ZodObject<{
     localId?: string | undefined;
     callTypeId?: number | null | undefined;
     locationId?: number | null | undefined;
+    locationText?: string | null | undefined;
     patientCount?: number | undefined;
     patients?: {
         patientNumber: number;

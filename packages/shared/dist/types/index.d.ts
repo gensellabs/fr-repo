@@ -25,6 +25,7 @@ export interface Incident {
     callType?: LovItem;
     locationId: number | null;
     location?: LovLocationItem;
+    locationText?: string | null;
     patientCount: number;
     patients: Patient[];
     responders: IncidentResponder[];
@@ -37,6 +38,7 @@ export interface IncidentCreateInput {
     localId?: string;
     callTypeId?: number | null;
     locationId?: number | null;
+    locationText?: string | null;
     patientCount?: number;
     responderIds?: number[];
     primaryResponderId?: number;
@@ -98,7 +100,14 @@ export interface IncidentResponder {
     isPrimary: boolean;
 }
 export interface LovResponderItem extends LovItem {
+    firstName?: string | null;
+    surname?: string | null;
+    username?: string | null;
+    email?: string | null;
+    mobile?: string | null;
     isAdmin: boolean;
+    isSysAdmin?: boolean;
+    role?: string;
 }
 export interface IncidentPhoto {
     id: number;

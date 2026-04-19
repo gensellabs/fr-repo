@@ -31,6 +31,7 @@ exports.IncidentCreateSchema = zod_1.z.object({
     localId: zod_1.z.string().uuid().optional(),
     callTypeId: zod_1.z.number().int().positive().nullable().optional(),
     locationId: zod_1.z.number().int().positive().nullable().optional(),
+    locationText: zod_1.z.string().max(25).nullable().optional(),
     patientCount: zod_1.z.number().int().min(1).max(50).default(1),
     responderIds: zod_1.z.array(zod_1.z.number().int().positive()).min(1),
     primaryResponderId: zod_1.z.number().int().positive(),
