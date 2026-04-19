@@ -24,6 +24,10 @@ async function runStartupMigrations() {
     await prisma.$executeRawUnsafe(
       `ALTER TABLE incidents ADD COLUMN IF NOT EXISTS "locationText" VARCHAR(25)`
     );
+    // Drop global unique on lov_areas.value — area names only need to be unique per district/org
+    await prisma.$executeRawUnsafe(
+      `ALTER TABLE lov_areas DROP CONSTRAINT IF EXISTS lov_areas_value_key`
+    );
     console.log('Startup migrations OK');
   } catch (e) {
     console.error('Startup migration warning:', e);

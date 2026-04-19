@@ -167,7 +167,7 @@ model LovReason {
 
 model LovArea {
   id             Int           @id @default(autoincrement())
-  value          String        @unique
+  value          String
   organisationId Int?
   organisation   Organisation? @relation("OrgLovAreas", fields: [organisationId], references: [id])
   districtId     Int?
