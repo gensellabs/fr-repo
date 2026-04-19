@@ -51,8 +51,8 @@ function App() {
             <Route path="audit"       element={<AuditPage />} />
             <Route path="stats"       element={<StatsPage />} />
             {isGroupSysAdmin    && <Route path="users"        element={<UserManagementPage />} />}
+            {isGroupSysAdmin    && <Route path="hierarchy"    element={<HierarchyPage />} />}
             {isCountrySysAdmin  && <Route path="organisations" element={<OrganisationsPage />} />}
-            {isSuperAdmin       && <Route path="hierarchy"    element={<HierarchyPage />} />}
             {isSuperAdmin       && <Route path="admin-users"  element={<AdminUsersPage />} />}
           </Route>
           <Route path="*" element={<Navigate to="/admin" replace />} />
@@ -75,8 +75,8 @@ function App() {
             <Route path="audit"       element={<AuditPage />} />
             <Route path="stats"       element={<StatsPage />} />
             {isGroupSysAdmin    && <Route path="users"         element={<UserManagementPage />} />}
+            {isGroupSysAdmin    && <Route path="hierarchy"     element={<HierarchyPage />} />}
             {isCountrySysAdmin  && <Route path="organisations" element={<OrganisationsPage />} />}
-            {isSuperAdmin       && <Route path="hierarchy"     element={<HierarchyPage />} />}
             {isSuperAdmin       && <Route path="admin-users"   element={<AdminUsersPage />} />}
           </Route>
         )}
