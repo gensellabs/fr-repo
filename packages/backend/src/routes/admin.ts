@@ -113,6 +113,7 @@ router.get('/users', requireAuth, requireSysAdmin, async (req: Request, res: Res
           id: true, name: true,
           country:  { select: { id: true, name: true } },
           province: { select: { id: true, name: true } },
+          district: { select: { id: true, name: true } },
         },
       },
     },
@@ -123,13 +124,17 @@ router.get('/users', requireAuth, requireSysAdmin, async (req: Request, res: Res
 // ─── PATCH /api/admin/users/:id/role  (SysAdmin only) ────────────────────────
 router.patch('/users/:id/role', requireAuth, requireSysAdmin, async (req: Request, res: Response) => {
   const id = parseInt(req.params.id, 10);
-  const { isAdmin, isSysAdmin, isActive, mobile, email } = req.body as {
+  const { isAdmin, isSysAdmin, isActive, mobile, email, username, organisationId } = req.body as {
     isAdmin?: boolean;
     isSysAdmin?: boolean;
     isActive?: boolean;
     mobile?: string;
     email?: string;
+    username?: string | null;
+    organisationId?: number | null;
   };
+
+  const isSuperAdmin = req.auth?.role === 'SUPER_ADMIN';
 
   // GROUP_SYSADMIN: only manage their own org; cannot grant isSysAdmin
   if (req.auth?.role === 'GROUP_SYSADMIN') {
@@ -145,11 +150,16 @@ router.patch('/users/:id/role', requireAuth, requireSysAdmin, async (req: Reques
   }
 
   const data: Record<string, unknown> = {};
-  if (typeof isAdmin   === 'boolean') data.isAdmin   = isAdmin;
+  if (typeof isAdmin    === 'boolean') data.isAdmin    = isAdmin;
   if (typeof isSysAdmin === 'boolean') data.isSysAdmin = isSysAdmin;
-  if (typeof isActive  === 'boolean') data.isActive  = isActive;
-  if (mobile  !== undefined) data.mobile = mobile.trim()  || null;
-  if (email   !== undefined) data.email  = email.trim()   || null;
+  if (typeof isActive   === 'boolean') data.isActive   = isActive;
+  if (mobile !== undefined) data.mobile = mobile.trim() || null;
+  if (email  !== undefined) data.email  = email.trim()  || null;
+  // SuperAdmin only: change username and reassign organisation
+  if (isSuperAdmin) {
+    if (username       !== undefined) data.username       = username?.trim()  || null;
+    if (organisationId !== undefined) data.organisationId = organisationId    || null;
+  }
 
   if (Object.keys(data).length === 0) {
     res.status(400).json({ error: 'No valid fields to update' });

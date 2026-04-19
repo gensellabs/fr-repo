@@ -18,22 +18,43 @@ interface UserRow {
     name: string;
     country?:  { id: number; name: string } | null;
     province?: { id: number; name: string } | null;
+    district?: { id: number; name: string } | null;
   } | null;
 }
+
+interface DropdownItem { id: number; name: string }
 
 export function UserManagementPage() {
   const { auth } = useAuth();
   const canSeeUsername = auth?.role === 'SUPER_ADMIN' || auth?.role === 'COUNTRY_SYSADMIN';
   const canSeeOrgCols  = auth?.role === 'SUPER_ADMIN' || auth?.role === 'COUNTRY_SYSADMIN';
+  const canEditDetails = auth?.role === 'SUPER_ADMIN';
 
-  const [users, setUsers]   = useState<UserRow[]>([]);
+  const [users,   setUsers]   = useState<UserRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState<number | null>(null);
-  const [error, setError]   = useState<string | null>(null);
-  const [editingMobile, setEditingMobile] = useState<number | null>(null);
-  const [mobileValue, setMobileValue]     = useState('');
+  const [saving,  setSaving]  = useState<number | null>(null);
+  const [error,   setError]   = useState<string | null>(null);
 
-  // Filters (SUPER_ADMIN / COUNTRY_SYSADMIN only)
+  // Mobile inline edit
+  const [editingMobile, setEditingMobile] = useState<number | null>(null);
+  const [mobileValue,   setMobileValue]   = useState('');
+
+  // Detail edit (username + org cascade) — SuperAdmin only
+  const [editingDetails, setEditingDetails] = useState<number | null>(null);
+  const [detailUsername,  setDetailUsername]  = useState('');
+  const [detailCountryId, setDetailCountryId] = useState('');
+  const [detailRegionId,  setDetailRegionId]  = useState('');
+  const [detailDistrictId, setDetailDistrictId] = useState('');
+  const [detailOrgId,     setDetailOrgId]     = useState('');
+  const [detailError,     setDetailError]     = useState<string | null>(null);
+
+  // Cascade dropdown data for detail edit
+  const [ddCountries,  setDdCountries]  = useState<DropdownItem[]>([]);
+  const [ddRegions,    setDdRegions]    = useState<DropdownItem[]>([]);
+  const [ddDistricts,  setDdDistricts]  = useState<DropdownItem[]>([]);
+  const [ddOrgs,       setDdOrgs]       = useState<DropdownItem[]>([]);
+
+  // List filters
   const [filterCountry,  setFilterCountry]  = useState('');
   const [filterProvince, setFilterProvince] = useState('');
   const [filterSearch,   setFilterSearch]   = useState('');
@@ -52,37 +73,133 @@ export function UserManagementPage() {
 
   useEffect(() => { load(); }, []);
 
+  // Pre-load countries for the detail-edit cascade (SuperAdmin only)
+  useEffect(() => {
+    if (canEditDetails) {
+      (apiClient.getCountries(true) as Promise<{id:number;name:string}[]>)
+        .then((c) => setDdCountries(c))
+        .catch(() => {});
+    }
+  }, [canEditDetails]);
+
+  // ── Mobile save ───────────────────────────────────────────────────────────
+
   async function saveMobile(user: UserRow) {
     setSaving(user.id);
     try {
       await apiClient.updateUserRole(user.id, { mobile: mobileValue });
       setEditingMobile(null);
-      await load(); // re-fetch so all screens reflect the latest DB state
+      await load();
     } catch {
       alert('Failed to update mobile number. Please try again.');
-    } finally {
-      setSaving(null);
-    }
+    } finally { setSaving(null); }
   }
+
+  // ── Role toggles ──────────────────────────────────────────────────────────
 
   async function toggle(user: UserRow, field: 'isAdmin' | 'isSysAdmin' | 'isActive') {
     setSaving(user.id);
     try {
       await apiClient.updateUserRole(user.id, { [field]: !user[field] });
-      await load(); // re-fetch so all screens reflect the latest DB state
+      await load();
     } catch {
-      alert('Failed to update user role. Please try again.');
-    } finally {
-      setSaving(null);
+      alert('Failed to update. Please try again.');
+    } finally { setSaving(null); }
+  }
+
+  // ── Detail edit cascade ───────────────────────────────────────────────────
+
+  async function openDetailEdit(user: UserRow) {
+    setDetailError(null);
+    setDetailUsername(user.username ?? '');
+    setDetailOrgId(String(user.organisation?.id ?? ''));
+
+    const cid = String(user.organisation?.country?.id  ?? '');
+    const rid = String(user.organisation?.province?.id ?? '');
+    const did = String(user.organisation?.district?.id ?? '');
+
+    setDetailCountryId(cid);
+    setDetailRegionId(rid);
+    setDetailDistrictId(did);
+
+    // Pre-populate cascade dropdowns from current org hierarchy
+    try {
+      const [r, d, o] = await Promise.all([
+        cid ? (apiClient.getRegions(Number(cid))                             as Promise<{id:number;name:string}[]>) : Promise.resolve([]),
+        rid ? (apiClient.getDistricts(Number(rid))                           as Promise<{id:number;name:string}[]>) : Promise.resolve([]),
+        did ? (apiClient.getOrganisations({ districtId: Number(did) })       as Promise<{id:number;name:string}[]>) : Promise.resolve([]),
+      ]);
+      setDdRegions(r);
+      setDdDistricts(d);
+      setDdOrgs(o);
+    } catch { /* non-fatal */ }
+
+    setEditingDetails(user.id);
+  }
+
+  async function onDetailCountryChange(cid: string) {
+    setDetailCountryId(cid);
+    setDetailRegionId(''); setDetailDistrictId(''); setDetailOrgId('');
+    setDdRegions([]); setDdDistricts([]); setDdOrgs([]);
+    if (cid) {
+      try {
+        const r = await apiClient.getRegions(Number(cid)) as {id:number;name:string}[];
+        setDdRegions(r);
+      } catch { /* non-fatal */ }
     }
   }
 
-  // Derive filter options from loaded data
-  const countries  = Array.from(new Map(users.map((u) => u.organisation?.country).filter(Boolean).map((c) => [c!.id, c!])).values());
-  const provinces  = Array.from(new Map(users.map((u) => u.organisation?.province).filter(Boolean).map((p) => [p!.id, p!])).values())
-    .filter((p) => !filterCountry || users.some((u) => u.organisation?.country?.id === Number(filterCountry) && u.organisation?.province?.id === p.id));
+  async function onDetailRegionChange(rid: string) {
+    setDetailRegionId(rid);
+    setDetailDistrictId(''); setDetailOrgId('');
+    setDdDistricts([]); setDdOrgs([]);
+    if (rid) {
+      try {
+        const d = await apiClient.getDistricts(Number(rid)) as {id:number;name:string}[];
+        setDdDistricts(d);
+      } catch { /* non-fatal */ }
+    }
+  }
 
-  // Apply filters
+  async function onDetailDistrictChange(did: string) {
+    setDetailDistrictId(did);
+    setDetailOrgId('');
+    setDdOrgs([]);
+    if (did) {
+      try {
+        const o = await apiClient.getOrganisations({ districtId: Number(did) }) as {id:number;name:string}[];
+        setDdOrgs(o);
+      } catch { /* non-fatal */ }
+    }
+  }
+
+  async function saveDetails(userId: number) {
+    setDetailError(null);
+    setSaving(userId);
+    try {
+      await apiClient.updateUserRole(userId, {
+        username:       detailUsername.trim()  || null,
+        organisationId: detailOrgId ? Number(detailOrgId) : null,
+      });
+      setEditingDetails(null);
+      await load();
+    } catch (e: unknown) {
+      setDetailError((e as Error).message ?? 'Failed to save. Please try again.');
+    } finally { setSaving(null); }
+  }
+
+  // ── Filters ───────────────────────────────────────────────────────────────
+
+  const countries = Array.from(new Map(
+    users.map((u) => u.organisation?.country).filter(Boolean).map((c) => [c!.id, c!])
+  ).values());
+
+  const provinces = Array.from(new Map(
+    users.map((u) => u.organisation?.province).filter(Boolean).map((p) => [p!.id, p!])
+  ).values()).filter((p) =>
+    !filterCountry || users.some((u) => u.organisation?.country?.id === Number(filterCountry) && u.organisation?.province?.id === p.id)
+  );
+
   const filtered = users.filter((u) => {
     if (filterCountry  && u.organisation?.country?.id  !== Number(filterCountry))  return false;
     if (filterProvince && u.organisation?.province?.id !== Number(filterProvince)) return false;
@@ -93,6 +210,22 @@ export function UserManagementPage() {
     }
     return true;
   });
+
+  // How many columns total (for colSpan in detail row)
+  const colCount =
+    1 + // First Name
+    1 + // Surname
+    (canSeeUsername ? 1 : 0) +
+    1 + // Email
+    1 + // Mobile
+    (canSeeOrgCols ? 1 : 0) + // Organisation
+    (canSeeOrgCols ? 1 : 0) + // Country
+    (canSeeOrgCols ? 1 : 0) + // Region
+    (canSeeOrgCols ? 1 : 0) + // District
+    1 + // Active
+    1 + // Admin
+    1 + // SysAdmin
+    (canEditDetails ? 1 : 0); // Edit Details
 
   return (
     <div>
@@ -135,83 +268,186 @@ export function UserManagementPage() {
       {loading ? (
         <p style={{ color: '#9ca3af', textAlign: 'center', marginTop: 48 }}>Loading...</p>
       ) : (
-        <table style={table}>
-          <thead>
-            <tr style={thead}>
-              <th style={th}>First Name</th>
-              <th style={th}>Surname</th>
-              {canSeeUsername && <th style={th}>Username</th>}
-              <th style={th}>Email</th>
-              <th style={th}>Mobile</th>
-              {canSeeOrgCols && <th style={th}>Organisation</th>}
-              {canSeeOrgCols && <th style={th}>Country</th>}
-              {canSeeOrgCols && <th style={th}>Region</th>}
-              <th style={{ ...th, textAlign: 'center' }}>Active</th>
-              <th style={{ ...th, textAlign: 'center' }}>Admin</th>
-              <th style={{ ...th, textAlign: 'center' }}>SysAdmin</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((user) => (
-              <tr key={user.id} style={tr}>
-                <td style={td}>
-                  <span style={{ fontWeight: 600 }}>{user.firstName ?? user.value}</span>
-                  {user.isSysAdmin && <span style={sysAdminTag}>SYSADMIN</span>}
-                  {user.isAdmin && !user.isSysAdmin && <span style={adminTag}>ADMIN</span>}
-                </td>
-                <td style={td}>{user.surname ?? '—'}</td>
-                {canSeeUsername && (
-                  <td style={{ ...td, fontFamily: 'monospace', fontSize: 13, color: '#374151' }}>
-                    {user.username ?? '—'}
-                  </td>
-                )}
-                <td style={{ ...td, color: '#6b7280', fontSize: 13 }}>{user.email ?? '—'}</td>
-                <td style={{ ...td, color: '#6b7280', fontSize: 13 }}>
-                  {editingMobile === user.id ? (
-                    <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                      <input
-                        autoFocus
-                        style={{ border: '1.5px solid #dc2626', borderRadius: 6, padding: '3px 8px', fontSize: 13, width: 130 }}
-                        value={mobileValue}
-                        onChange={(e) => setMobileValue(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === 'Enter') saveMobile(user); if (e.key === 'Escape') setEditingMobile(null); }}
-                        placeholder="+27821234567"
-                      />
-                      <button onClick={() => saveMobile(user)} disabled={saving === user.id}
-                        style={{ fontSize: 12, padding: '3px 8px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 5, cursor: 'pointer' }}>
-                        Save
-                      </button>
-                      <button onClick={() => setEditingMobile(null)}
-                        style={{ fontSize: 12, padding: '3px 8px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 5, cursor: 'pointer' }}>
-                        ✕
-                      </button>
-                    </span>
-                  ) : (
-                    <span
-                      title="Click to edit mobile"
-                      style={{ cursor: 'pointer', borderBottom: '1px dashed #d1d5db' }}
-                      onClick={() => { setEditingMobile(user.id); setMobileValue(user.mobile ?? ''); }}
-                    >
-                      {user.mobile ?? '—'}
-                    </span>
-                  )}
-                </td>
-                {canSeeOrgCols && <td style={{ ...td, fontSize: 13 }}>{user.organisation?.name ?? '—'}</td>}
-                {canSeeOrgCols && <td style={{ ...td, fontSize: 13 }}>{user.organisation?.country?.name ?? '—'}</td>}
-                {canSeeOrgCols && <td style={{ ...td, fontSize: 13 }}>{user.organisation?.province?.name ?? '—'}</td>}
-                <td style={{ ...td, textAlign: 'center' }}>
-                  <ToggleBtn value={user.isActive}  disabled={saving === user.id} onToggle={() => toggle(user, 'isActive')}  colorOn="#16a34a" />
-                </td>
-                <td style={{ ...td, textAlign: 'center' }}>
-                  <ToggleBtn value={user.isAdmin}   disabled={saving === user.id} onToggle={() => toggle(user, 'isAdmin')}   colorOn="#dc2626" />
-                </td>
-                <td style={{ ...td, textAlign: 'center' }}>
-                  <ToggleBtn value={user.isSysAdmin} disabled={saving === user.id} onToggle={() => toggle(user, 'isSysAdmin')} colorOn="#7c3aed" />
-                </td>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={table}>
+            <thead>
+              <tr style={thead}>
+                <th style={th}>First Name</th>
+                <th style={th}>Surname</th>
+                {canSeeUsername && <th style={th}>Username</th>}
+                <th style={th}>Email</th>
+                <th style={th}>Mobile</th>
+                {canSeeOrgCols && <th style={th}>Organisation</th>}
+                {canSeeOrgCols && <th style={th}>Country</th>}
+                {canSeeOrgCols && <th style={th}>Region</th>}
+                {canSeeOrgCols && <th style={th}>District</th>}
+                <th style={{ ...th, textAlign: 'center' }}>Active</th>
+                <th style={{ ...th, textAlign: 'center' }}>Admin</th>
+                <th style={{ ...th, textAlign: 'center' }}>SysAdmin</th>
+                {canEditDetails && <th style={{ ...th, width: 80 }} />}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {filtered.map((user) => (
+                <React.Fragment key={user.id}>
+                  {/* ── Main row ── */}
+                  <tr style={tr}>
+                    <td style={td}>
+                      <span style={{ fontWeight: 600 }}>{user.firstName ?? user.value}</span>
+                      {user.isSysAdmin && <span style={sysAdminTag}>SYSADMIN</span>}
+                      {user.isAdmin && !user.isSysAdmin && <span style={adminTag}>ADMIN</span>}
+                    </td>
+                    <td style={td}>{user.surname ?? '—'}</td>
+                    {canSeeUsername && (
+                      <td style={{ ...td, fontFamily: 'monospace', fontSize: 13, color: '#374151' }}>
+                        {user.username ?? '—'}
+                      </td>
+                    )}
+                    <td style={{ ...td, color: '#6b7280', fontSize: 13 }}>{user.email ?? '—'}</td>
+
+                    {/* Mobile — inline edit */}
+                    <td style={{ ...td, color: '#6b7280', fontSize: 13 }}>
+                      {editingMobile === user.id ? (
+                        <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                          <input
+                            autoFocus
+                            style={{ border: '1.5px solid #dc2626', borderRadius: 6, padding: '3px 8px', fontSize: 13, width: 130 }}
+                            value={mobileValue}
+                            onChange={(e) => setMobileValue(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') saveMobile(user); if (e.key === 'Escape') setEditingMobile(null); }}
+                            placeholder="+27821234567"
+                          />
+                          <button onClick={() => saveMobile(user)} disabled={saving === user.id}
+                            style={{ fontSize: 12, padding: '3px 8px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 5, cursor: 'pointer' }}>
+                            Save
+                          </button>
+                          <button onClick={() => setEditingMobile(null)}
+                            style={{ fontSize: 12, padding: '3px 8px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 5, cursor: 'pointer' }}>
+                            ✕
+                          </button>
+                        </span>
+                      ) : (
+                        <span
+                          title="Click to edit mobile"
+                          style={{ cursor: 'pointer', borderBottom: '1px dashed #d1d5db' }}
+                          onClick={() => { setEditingMobile(user.id); setMobileValue(user.mobile ?? ''); }}
+                        >
+                          {user.mobile ?? '—'}
+                        </span>
+                      )}
+                    </td>
+
+                    {canSeeOrgCols && <td style={{ ...td, fontSize: 13 }}>{user.organisation?.name ?? '—'}</td>}
+                    {canSeeOrgCols && <td style={{ ...td, fontSize: 13 }}>{user.organisation?.country?.name ?? '—'}</td>}
+                    {canSeeOrgCols && <td style={{ ...td, fontSize: 13 }}>{user.organisation?.province?.name ?? '—'}</td>}
+                    {canSeeOrgCols && <td style={{ ...td, fontSize: 13 }}>{user.organisation?.district?.name ?? '—'}</td>}
+
+                    <td style={{ ...td, textAlign: 'center' }}>
+                      <ToggleBtn value={user.isActive}   disabled={saving === user.id} onToggle={() => toggle(user, 'isActive')}   colorOn="#16a34a" />
+                    </td>
+                    <td style={{ ...td, textAlign: 'center' }}>
+                      <ToggleBtn value={user.isAdmin}    disabled={saving === user.id} onToggle={() => toggle(user, 'isAdmin')}    colorOn="#dc2626" />
+                    </td>
+                    <td style={{ ...td, textAlign: 'center' }}>
+                      <ToggleBtn value={user.isSysAdmin} disabled={saving === user.id} onToggle={() => toggle(user, 'isSysAdmin')} colorOn="#7c3aed" />
+                    </td>
+                    {canEditDetails && (
+                      <td style={{ ...td, textAlign: 'center' }}>
+                        <button
+                          style={editBtn}
+                          onClick={() => editingDetails === user.id ? setEditingDetails(null) : openDetailEdit(user)}
+                        >
+                          {editingDetails === user.id ? 'Close' : 'Edit'}
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+
+                  {/* ── Detail edit expansion row ── */}
+                  {canEditDetails && editingDetails === user.id && (
+                    <tr style={{ backgroundColor: '#fef9f9' }}>
+                      <td colSpan={colCount} style={{ padding: '16px 20px', borderBottom: '2px solid #fecaca' }}>
+                        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+
+                          {/* Username */}
+                          <label style={detailLabel}>
+                            Username
+                            <input
+                              style={detailInp}
+                              value={detailUsername}
+                              onChange={(e) => setDetailUsername(e.target.value)}
+                              placeholder="username"
+                              autoComplete="off"
+                            />
+                          </label>
+
+                          {/* Country */}
+                          <label style={detailLabel}>
+                            Country
+                            <select style={detailInp} value={detailCountryId} onChange={(e) => onDetailCountryChange(e.target.value)}>
+                              <option value="">— Select —</option>
+                              {ddCountries.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            </select>
+                          </label>
+
+                          {/* Region */}
+                          <label style={detailLabel}>
+                            Region
+                            <select style={detailInp} value={detailRegionId} onChange={(e) => onDetailRegionChange(e.target.value)} disabled={!detailCountryId}>
+                              <option value="">— Select —</option>
+                              {ddRegions.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                            </select>
+                          </label>
+
+                          {/* District */}
+                          <label style={detailLabel}>
+                            District
+                            <select style={detailInp} value={detailDistrictId} onChange={(e) => onDetailDistrictChange(e.target.value)} disabled={!detailRegionId}>
+                              <option value="">— Select —</option>
+                              {ddDistricts.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                            </select>
+                          </label>
+
+                          {/* Organisation */}
+                          <label style={detailLabel}>
+                            Organisation
+                            <select style={detailInp} value={detailOrgId} onChange={(e) => setDetailOrgId(e.target.value)} disabled={!detailDistrictId}>
+                              <option value="">— Select —</option>
+                              {ddOrgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+                            </select>
+                          </label>
+
+                          {/* Buttons */}
+                          <div style={{ display: 'flex', gap: 8, alignSelf: 'flex-end', paddingBottom: 1 }}>
+                            <button
+                              style={saveDetailBtn}
+                              onClick={() => saveDetails(user.id)}
+                              disabled={saving === user.id}
+                            >
+                              {saving === user.id ? 'Saving…' : 'Save'}
+                            </button>
+                            <button
+                              style={cancelDetailBtn}
+                              onClick={() => { setEditingDetails(null); setDetailError(null); }}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+
+                        {detailError && (
+                          <div style={{ marginTop: 10, padding: '8px 12px', backgroundColor: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 8, fontSize: 13 }}>
+                            ⚠ {detailError}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );
@@ -238,16 +474,21 @@ function ToggleBtn({ value, disabled, onToggle, colorOn }: {
   );
 }
 
-const toolbar: React.CSSProperties       = { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 16 };
-const pageTitle: React.CSSProperties     = { fontSize: 24, fontWeight: 700 };
-const subtitle: React.CSSProperties      = { color: '#6b7280', fontSize: 14 };
-const filterRow: React.CSSProperties     = { display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' };
-const filterSelect: React.CSSProperties  = { border: '1.5px solid #d1d5db', borderRadius: 8, padding: '7px 12px', fontSize: 14 };
-const clearBtn: React.CSSProperties      = { border: '1px solid #d1d5db', borderRadius: 8, padding: '7px 14px', fontSize: 13, background: '#f3f4f6', cursor: 'pointer' };
-const table: React.CSSProperties         = { width: '100%', borderCollapse: 'collapse', backgroundColor: '#fff', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' };
-const thead: React.CSSProperties         = { backgroundColor: '#f3f4f6' };
-const th: React.CSSProperties            = { padding: '12px 14px', textAlign: 'left', fontSize: 13, fontWeight: 600, color: '#374151', borderBottom: '1px solid #e5e7eb' };
-const tr: React.CSSProperties            = { borderBottom: '1px solid #f3f4f6' };
-const td: React.CSSProperties            = { padding: '12px 14px', fontSize: 14, color: '#111827', verticalAlign: 'middle' };
-const adminTag: React.CSSProperties      = { marginLeft: 8, fontSize: 11, fontWeight: 700, backgroundColor: '#fef2f2', color: '#dc2626', borderRadius: 4, padding: '2px 6px' };
-const sysAdminTag: React.CSSProperties   = { marginLeft: 8, fontSize: 11, fontWeight: 700, backgroundColor: '#f5f3ff', color: '#7c3aed', borderRadius: 4, padding: '2px 6px' };
+const toolbar: React.CSSProperties        = { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 16 };
+const pageTitle: React.CSSProperties      = { fontSize: 24, fontWeight: 700 };
+const subtitle: React.CSSProperties       = { color: '#6b7280', fontSize: 14 };
+const filterRow: React.CSSProperties      = { display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' };
+const filterSelect: React.CSSProperties   = { border: '1.5px solid #d1d5db', borderRadius: 8, padding: '7px 12px', fontSize: 14 };
+const clearBtn: React.CSSProperties       = { border: '1px solid #d1d5db', borderRadius: 8, padding: '7px 14px', fontSize: 13, background: '#f3f4f6', cursor: 'pointer' };
+const table: React.CSSProperties          = { width: '100%', borderCollapse: 'collapse', backgroundColor: '#fff', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' };
+const thead: React.CSSProperties          = { backgroundColor: '#f3f4f6' };
+const th: React.CSSProperties             = { padding: '12px 14px', textAlign: 'left', fontSize: 13, fontWeight: 600, color: '#374151', borderBottom: '1px solid #e5e7eb' };
+const tr: React.CSSProperties             = { borderBottom: '1px solid #f3f4f6' };
+const td: React.CSSProperties             = { padding: '12px 14px', fontSize: 14, color: '#111827', verticalAlign: 'middle' };
+const adminTag: React.CSSProperties       = { marginLeft: 8, fontSize: 11, fontWeight: 700, backgroundColor: '#fef2f2', color: '#dc2626', borderRadius: 4, padding: '2px 6px' };
+const sysAdminTag: React.CSSProperties    = { marginLeft: 8, fontSize: 11, fontWeight: 700, backgroundColor: '#f5f3ff', color: '#7c3aed', borderRadius: 4, padding: '2px 6px' };
+const editBtn: React.CSSProperties        = { padding: '4px 12px', fontSize: 12, fontWeight: 600, border: '1.5px solid #d1d5db', borderRadius: 6, background: '#fff', cursor: 'pointer', color: '#374151' };
+const detailLabel: React.CSSProperties    = { display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, fontWeight: 600, color: '#6b7280' };
+const detailInp: React.CSSProperties      = { padding: '7px 10px', borderRadius: 7, border: '1.5px solid #d1d5db', fontSize: 13, minWidth: 160 };
+const saveDetailBtn: React.CSSProperties  = { padding: '8px 18px', backgroundColor: '#dc2626', color: '#fff', border: 'none', borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: 'pointer' };
+const cancelDetailBtn: React.CSSProperties = { padding: '8px 14px', backgroundColor: '#f3f4f6', color: '#374151', border: 'none', borderRadius: 7, fontSize: 13, cursor: 'pointer' };
