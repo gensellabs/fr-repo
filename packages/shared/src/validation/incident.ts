@@ -31,6 +31,7 @@ export const IncidentCreateSchema = z.object({
   localId: z.string().uuid().optional(),
   callTypeId: z.number().int().positive().nullable().optional(),
   locationId: z.number().int().positive().nullable().optional(),
+  locationText: z.string().max(25).nullable().optional(),
   patientCount: z.number().int().min(1).max(50).default(1),
   responderIds: z.array(z.number().int().positive()).min(1),
   primaryResponderId: z.number().int().positive(),

@@ -291,6 +291,7 @@ model Incident {
   callType       LovCallType?        @relation(fields: [callTypeId], references: [id])
   locationId     Int?
   location       LovLocation?        @relation(fields: [locationId], references: [id])
+  locationText   String?             @db.VarChar(25)
   patientCount   Int                 @default(1)
   patients       Patient[]
   responders     IncidentResponder[]

@@ -40,9 +40,6 @@ export function AdminLayout() {
           <NavLink key={t.key} to={`/admin/lovs/${t.key}`} style={navLink}>{t.label}</NavLink>
         ))}
 
-        <p style={{ ...sidebarTitle, marginTop: 20 }}>Special</p>
-        <NavLink to="/admin/locations" style={navLink}>Location Hierarchy</NavLink>
-
         <p style={{ ...sidebarTitle, marginTop: 20 }}>Reports</p>
         <NavLink to="/admin/stats" style={navLink}>Statistics</NavLink>
         <NavLink to="/admin/audit" style={navLink}>Audit Log</NavLink>
@@ -51,7 +48,8 @@ export function AdminLayout() {
         {isGroupSysAdmin && (
           <>
             <p style={{ ...sidebarTitle, marginTop: 20 }}>Group SysAdmin</p>
-            <NavLink to="/admin/users" style={navLink}>Responder Roles</NavLink>
+            <NavLink to="/admin/users"     style={navLink}>Responder Roles</NavLink>
+            <NavLink to="/admin/hierarchy" style={navLink}>Geographic Hierarchy</NavLink>
           </>
         )}
 
@@ -60,7 +58,6 @@ export function AdminLayout() {
           <>
             <p style={{ ...sidebarTitle, marginTop: 20 }}>Country SysAdmin</p>
             <NavLink to="/admin/organisations" style={navLink}>Organisations</NavLink>
-            <NavLink to="/admin/hierarchy"     style={navLink}>Geographic Hierarchy</NavLink>
           </>
         )}
 

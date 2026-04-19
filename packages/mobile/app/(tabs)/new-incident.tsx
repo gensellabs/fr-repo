@@ -53,7 +53,7 @@ export default function NewIncident() {
 
       // Fetch all LOVs directly from the API (bypasses empty-cache issue)
       try {
-        const [callTypes, diagnoses, transports, hospitals, responders, medHistory, drugs, areas] =
+        const [callTypes, diagnoses, transports, hospitals, responders, medHistory, drugs] =
           await Promise.all([
             api.getLov('call_types') as Promise<LovOption[]>,
             api.getLov('reasons') as Promise<LovOption[]>,
@@ -62,7 +62,6 @@ export default function NewIncident() {
             api.getLov('responders') as Promise<LovOption[]>,
             api.getLov('medical_history_presets') as Promise<LovOption[]>,
             api.getLov('drugs') as Promise<DrugLovItem[]>,
-            api.getAreas() as Promise<LovOption[]>,
           ]);
 
         // Drugs use 'name' field — normalise to 'value' so LovPicker & DrugEntryList work
@@ -80,8 +79,6 @@ export default function NewIncident() {
           responders,
           medical_history_presets: medHistory,
           drugs: drugOptions,
-          areas: areas,
-          areas_nested: areas,
         });
 
         // Warm the offline cache in background
@@ -168,9 +165,6 @@ export default function NewIncident() {
   }
 
   const p = draft.patients[currentPatient];
-  const areaLocations = draft.areaId
-    ? ((lovs['areas_nested'] ?? []).find((a) => a.id === draft.areaId) as { locations?: LovOption[] } | undefined)?.locations ?? []
-    : (lovs['areas_nested'] ?? []).flatMap((a) => (a as { locations?: LovOption[] }).locations ?? []);
 
   return (
     <SafeAreaView style={styles.safe} edges={['left', 'right', 'bottom']}>
@@ -210,25 +204,21 @@ export default function NewIncident() {
             />
 
 
-            <LovPicker
-              label="Area"
-              value={draft.areaId ? { id: draft.areaId, value: draft.areaLabel } : null}
-              options={lovs['areas'] ?? []}
-              onSelect={(o) => updateDraft({ areaId: o.id, areaLabel: o.value, locationId: null, locationLabel: '' })}
+            <Text style={styles.fieldLabel}>
+              Location <Text style={{ color: '#9ca3af', fontWeight: '400' }}>(optional, max 25 chars)</Text>
+            </Text>
+            <TextInput
+              style={styles.textInput}
+              placeholder="e.g. Main Rd intersection"
+              placeholderTextColor="#9ca3af"
+              value={draft.locationText}
+              onChangeText={(v) => updateDraft({ locationText: v.slice(0, 25) })}
+              maxLength={25}
+              autoCapitalize="sentences"
             />
-
-            <LovPicker
-              label="Location"
-              value={draft.locationId ? { id: draft.locationId, value: draft.locationLabel } : null}
-              options={areaLocations}
-              onSelect={(o) => updateDraft({ locationId: o.id, locationLabel: o.value })}
-              onAddNew={async (val) => {
-                const item = await api.addLovValue('locations', val, { areaId: draft.areaId }) as LovOption;
-                setLovs((l) => ({ ...l, locations: [...(l['locations'] ?? []), item] }));
-                return item;
-              }}
-              placeholder="Select location..."
-            />
+            <Text style={{ fontSize: 11, color: '#9ca3af', marginTop: 2, textAlign: 'right' }}>
+              {draft.locationText?.length ?? 0}/25
+            </Text>
 
             <Text style={styles.fieldLabel}>Responders on Scene</Text>
             <View style={styles.chipRow}>

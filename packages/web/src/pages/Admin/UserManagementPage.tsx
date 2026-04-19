@@ -112,7 +112,7 @@ export function UserManagementPage() {
               {countries.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
             <select style={filterSelect} value={filterProvince} onChange={(e) => setFilterProvince(e.target.value)} disabled={!filterCountry}>
-              <option value="">All Provinces</option>
+              <option value="">All Regions</option>
               {provinces.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </>
@@ -145,7 +145,7 @@ export function UserManagementPage() {
               <th style={th}>Mobile</th>
               {canSeeOrgCols && <th style={th}>Organisation</th>}
               {canSeeOrgCols && <th style={th}>Country</th>}
-              {canSeeOrgCols && <th style={th}>Province</th>}
+              {canSeeOrgCols && <th style={th}>Region</th>}
               <th style={{ ...th, textAlign: 'center' }}>Active</th>
               <th style={{ ...th, textAlign: 'center' }}>Admin</th>
               <th style={{ ...th, textAlign: 'center' }}>SysAdmin</th>

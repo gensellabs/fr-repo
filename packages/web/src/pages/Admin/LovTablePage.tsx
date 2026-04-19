@@ -226,7 +226,7 @@ export function LovTablePage() {
             value={filterProvince}
             onChange={(e) => setFilterProvince(e.target.value)}
           >
-            <option value="">All Provinces</option>
+            <option value="">All Regions</option>
             {provinces.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
           <input
@@ -315,7 +315,7 @@ export function LovTablePage() {
                   <th style={th}>Mobile</th>
                   {canSeeAllOrgs && <th style={th}>Organisation</th>}
                   {canSeeAllOrgs && <th style={th}>Country</th>}
-                  {canSeeAllOrgs && <th style={th}>Province</th>}
+                  {canSeeAllOrgs && <th style={th}>Region</th>}
                 </>
               ) : (
                 <>

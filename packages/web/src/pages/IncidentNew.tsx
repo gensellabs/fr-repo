@@ -5,7 +5,6 @@ import { COLOUR_CODES, COLOUR_CODE_STYLES, ColourCode } from '@firstresponders/s
 import { v4 as uuidv4 } from 'uuid';
 
 interface LovItem { id: number; value?: string; name?: string; defaultUom?: string; }
-interface AreaItem { id: number; value: string; locations: LovItem[]; }
 
 function display(item: LovItem) { return item.name ?? item.value ?? ''; }
 
@@ -30,10 +29,8 @@ function emptyPatient(num: number): PatientForm {
 export function IncidentNew() {
   const { auth } = useAuth();
   const [lovs, setLovs] = useState<Record<string, LovItem[]>>({});
-  const [areas, setAreas] = useState<AreaItem[]>([]);
   const [callTypeId, setCallTypeId] = useState<number | null>(null);
-  const [areaId, setAreaId] = useState<number | null>(null);
-  const [locationId, setLocationId] = useState<number | null>(null);
+  const [locationText, setLocationText] = useState('');
   const [responderIds, setResponderIds] = useState<number[]>(auth ? [auth.responderId] : []);
   const [patients, setPatients] = useState<PatientForm[]>([emptyPatient(1)]);
   const [activePatient, setActivePatient] = useState(0);
@@ -42,24 +39,14 @@ export function IncidentNew() {
   const [newLovInputs, setNewLovInputs] = useState<Record<string, string>>({});
 
   const incidentTime = new Date();
-  const areaLocations = areaId
-    ? areas.find((a) => a.id === areaId)?.locations ?? []
-    : areas.flatMap((a) => a.locations);
 
   useEffect(() => {
     const tables = ['call_types', 'reasons', 'transports', 'hospitals', 'responders', 'medical_history_presets', 'drugs'];
-    Promise.all([
-      ...tables.map(async (t) => ({ table: t, data: await apiClient.getLov<LovItem[]>(t) })),
-      apiClient.getAreas().then((data) => ({ table: '__areas', data })),
-    ]).then((results) => {
+    Promise.all(
+      tables.map(async (t) => ({ table: t, data: await apiClient.getLov<LovItem[]>(t) }))
+    ).then((results) => {
       const loaded: Record<string, LovItem[]> = {};
-      for (const r of results) {
-        if (r.table === '__areas') {
-          setAreas(r.data as AreaItem[]);
-        } else {
-          loaded[r.table] = r.data as LovItem[];
-        }
-      }
+      for (const r of results) loaded[r.table] = r.data as LovItem[];
       setLovs(loaded);
     });
   }, []);
@@ -78,12 +65,7 @@ export function IncidentNew() {
 
   async function addLovInline(table: string, value: string, extra?: object) {
     const item = await apiClient.addLovValue(table, value, extra) as LovItem;
-    if (table === 'locations') {
-      const updatedAreas = await apiClient.getAreas() as AreaItem[];
-      setAreas(updatedAreas);
-    } else {
-      setLovs((l) => ({ ...l, [table]: [...(l[table] ?? []), item] }));
-    }
+    setLovs((l) => ({ ...l, [table]: [...(l[table] ?? []), item] }));
     return item;
   }
 
@@ -94,7 +76,7 @@ export function IncidentNew() {
       await apiClient.createIncident({
         localId: uuidv4(),
         callTypeId,
-        locationId,
+        locationText: locationText.trim() || null,
         patientCount: patients.length,
         responderIds,
         primaryResponderId: auth.responderId,
@@ -114,7 +96,7 @@ export function IncidentNew() {
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
       // Reset form
-      setCallTypeId(null); setAreaId(null); setLocationId(null);
+      setCallTypeId(null); setLocationText('');
       setPatients([emptyPatient(1)]); setActivePatient(0);
     } catch (e) {
       alert('Failed to save incident.');
@@ -149,16 +131,18 @@ export function IncidentNew() {
             <h3 style={sectionTitle}>Incident Details</h3>
             <div style={grid2}>
               <LovSelect label="Call Type *" options={lovs['call_types']} value={callTypeId} onChange={setCallTypeId} table="call_types" onAdd={addLovInline} setLov={() => {}} />
-            </div>
-            <div style={grid2}>
               <div>
-                <label style={fieldLabel}>Area</label>
-                <select style={selectStyle} value={areaId ?? ''} onChange={(e) => { setAreaId(e.target.value ? parseInt(e.target.value) : null); setLocationId(null); }}>
-                  <option value="">All areas</option>
-                  {areas.map((a) => <option key={a.id} value={a.id}>{a.value}</option>)}
-                </select>
+                <label style={fieldLabel}>Location <span style={{ color: '#9ca3af', fontWeight: 400 }}>(max 25 chars)</span></label>
+                <input
+                  style={vitalInput}
+                  type="text"
+                  placeholder="e.g. Main Rd intersection"
+                  value={locationText}
+                  onChange={(e) => setLocationText(e.target.value.slice(0, 25))}
+                  maxLength={25}
+                />
+                <span style={{ fontSize: 11, color: '#9ca3af' }}>{locationText.length}/25</span>
               </div>
-              <LovSelect label="Location" options={areaLocations} value={locationId} onChange={setLocationId} table="locations" onAdd={(t, v) => addLovInline(t, v, { areaId })} setLov={() => {}} />
             </div>
             <div>
               <label style={fieldLabel}>Responders on Scene</label>

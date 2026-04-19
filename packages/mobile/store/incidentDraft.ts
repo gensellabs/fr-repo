@@ -57,10 +57,7 @@ export interface IncidentDraft {
   localId: string;
   callTypeId: number | null;
   callTypeLabel: string;
-  areaId: number | null;
-  areaLabel: string;
-  locationId: number | null;
-  locationLabel: string;
+  locationText: string;
   patientCount: number;
   responderIds: number[];
   responderLabels: string[];
@@ -101,10 +98,7 @@ export function createNewDraft(primaryResponderId: number, responderLabel: strin
     localId: uuidv4(),
     callTypeId: null,
     callTypeLabel: '',
-    areaId: null,
-    areaLabel: '',
-    locationId: null,
-    locationLabel: '',
+    locationText: '',
     patientCount: 1,
     responderIds: [primaryResponderId],
     responderLabels: [responderLabel],
@@ -137,7 +131,7 @@ export function draftToPayload(draft: IncidentDraft) {
   return {
     localId: draft.localId,
     callTypeId: draft.callTypeId,
-    locationId: draft.locationId,
+    locationText: draft.locationText?.trim() || null,
     patientCount: draft.patientCount,
     responderIds: draft.responderIds,
     primaryResponderId: draft.primaryResponderId,

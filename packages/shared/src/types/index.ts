@@ -32,6 +32,7 @@ export interface Incident {
   callType?: LovItem;
   locationId: number | null;
   location?: LovLocationItem;
+  locationText?: string | null;
   patientCount: number;
   patients: Patient[];
   responders: IncidentResponder[];
@@ -45,6 +46,7 @@ export interface IncidentCreateInput {
   localId?: string;
   callTypeId?: number | null;
   locationId?: number | null;
+  locationText?: string | null;
   patientCount?: number;
   responderIds?: number[];
   primaryResponderId?: number;

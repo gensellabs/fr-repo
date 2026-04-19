@@ -172,12 +172,12 @@ function IncidentDetail({ incident, onClose }: { incident: Incident; onClose: ()
             <h4 style={cardHead}>Incident Details</h4>
             <DetailRow label="Call Type" value={incident.callType?.value} />
             <DetailRow label="Area" value={incident.location?.area?.value} />
-            <DetailRow label="Location" value={incident.location?.value} />
+            <DetailRow label="Location" value={(incident as unknown as { locationText?: string }).locationText ?? incident.location?.value} />
             {incident.organisation && (
               <>
                 <DetailRow label="Group" value={incident.organisation.name} />
                 <DetailRow label="District" value={incident.organisation.district?.name} />
-                <DetailRow label="Province" value={incident.organisation.district?.province?.name} />
+                <DetailRow label="Region" value={incident.organisation.district?.province?.name} />
                 <DetailRow label="Country" value={incident.organisation.district?.province?.country?.name} />
               </>
             )}
@@ -424,7 +424,7 @@ export function History() {
             {isSuperAdmin && (
               <MultiSelect label="Country" options={countryOpts} selected={countryFilter} onChange={setCountryFilter} />
             )}
-            <MultiSelect label="Province" options={provinceOpts} selected={provinceFilter} onChange={setProvinceFilter} />
+            <MultiSelect label="Region" options={provinceOpts} selected={provinceFilter} onChange={setProvinceFilter} />
             <MultiSelect label="District" options={districtOpts} selected={districtFilter} onChange={setDistrictFilter} />
             <MultiSelect label="Group" options={orgOpts} selected={orgFilter} onChange={setOrgFilter} />
           </>

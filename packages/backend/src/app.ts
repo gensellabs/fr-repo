@@ -21,6 +21,9 @@ async function runStartupMigrations() {
     await prisma.$executeRawUnsafe(
       `ALTER TABLE organisations ADD COLUMN IF NOT EXISTS "areaId" INTEGER REFERENCES lov_areas(id)`
     );
+    await prisma.$executeRawUnsafe(
+      `ALTER TABLE incidents ADD COLUMN IF NOT EXISTS "locationText" VARCHAR(25)`
+    );
     console.log('Startup migrations OK');
   } catch (e) {
     console.error('Startup migration warning:', e);

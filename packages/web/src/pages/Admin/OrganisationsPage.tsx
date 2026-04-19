@@ -231,7 +231,7 @@ export function OrganisationsPage() {
             setForm({ ...form, provinceId: e.target.value, districtId: '', areaId: '' });
             loadDistricts(Number(e.target.value));
           }} style={inp} disabled={isSuperAdmin && !form.countryId}>
-            <option value="">— Province *—</option>
+            <option value="">— Region *—</option>
             {provinces.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
           <select value={form.districtId ?? ''} onChange={(e) => {

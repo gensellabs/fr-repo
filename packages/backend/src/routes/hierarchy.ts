@@ -31,6 +31,7 @@ import {
   requireAuth,
   requireSuperAdmin,
   requireCountrySysAdmin,
+  requireGroupSysAdmin,
 } from '../middleware/auth';
 
 const router = Router();
@@ -89,9 +90,9 @@ router.get('/provinces', async (req, res) => {
 router.post('/provinces', requireAuth, requireCountrySysAdmin, async (req: Request, res: Response) => {
   const { name, countryId } = req.body as { name: string; countryId: number };
   if (!name || !countryId) { res.status(400).json({ error: 'name and countryId required' }); return; }
-  // CountrySysAdmin may only create provinces in their own country
+  // CountrySysAdmin may only create regions in their own country
   if (req.auth?.role === 'COUNTRY_SYSADMIN' && Number(countryId) !== req.auth.countryId) {
-    res.status(403).json({ error: 'You can only create provinces in your own country' }); return;
+    res.status(403).json({ error: 'You can only create regions in your own country' }); return;
   }
   const row = await prisma.province.create({ data: { name, countryId: Number(countryId) } });
   res.status(201).json(row);
@@ -102,12 +103,32 @@ router.put('/provinces/:id', requireAuth, requireCountrySysAdmin, async (req: Re
   if (req.auth?.role === 'COUNTRY_SYSADMIN') {
     const existing = await prisma.province.findUnique({ where: { id }, select: { countryId: true } });
     if (!existing || existing.countryId !== req.auth.countryId) {
-      res.status(403).json({ error: 'Province is not in your country' }); return;
+      res.status(403).json({ error: 'Region is not in your country' }); return;
     }
   }
   const { name, isActive } = req.body;
   const row = await prisma.province.update({ where: { id }, data: { name, isActive } });
   res.json(row);
+});
+
+router.delete('/provinces/:id', requireAuth, requireCountrySysAdmin, async (req: Request, res: Response) => {
+  const id = parseInt(req.params.id, 10);
+  if (req.auth?.role === 'COUNTRY_SYSADMIN') {
+    const existing = await prisma.province.findUnique({ where: { id }, select: { countryId: true } });
+    if (!existing || existing.countryId !== req.auth.countryId) {
+      res.status(403).json({ error: 'Region is not in your country' }); return;
+    }
+  }
+  const childCount = await prisma.district.count({ where: { provinceId: id } });
+  if (childCount > 0) {
+    res.status(409).json({ error: `Cannot delete — this region has ${childCount} district(s). Delete them first.` }); return;
+  }
+  try {
+    await prisma.province.delete({ where: { id } });
+    res.status(204).send();
+  } catch {
+    res.status(409).json({ error: 'Cannot delete — region may still have linked data.' });
+  }
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -132,11 +153,11 @@ router.get('/districts', async (req, res) => {
 router.post('/districts', requireAuth, requireCountrySysAdmin, async (req: Request, res: Response) => {
   const { name, provinceId } = req.body as { name: string; provinceId: number };
   if (!name || !provinceId) { res.status(400).json({ error: 'name and provinceId required' }); return; }
-  // CountrySysAdmin: verify province belongs to their country
+  // CountrySysAdmin: verify region belongs to their country
   if (req.auth?.role === 'COUNTRY_SYSADMIN') {
     const province = await prisma.province.findUnique({ where: { id: Number(provinceId) }, select: { countryId: true } });
     if (!province || province.countryId !== req.auth.countryId) {
-      res.status(403).json({ error: 'Province is not in your country' }); return;
+      res.status(403).json({ error: 'Region is not in your country' }); return;
     }
   }
   const row = await prisma.district.create({ data: { name, provinceId: Number(provinceId) } });
@@ -154,6 +175,26 @@ router.put('/districts/:id', requireAuth, requireCountrySysAdmin, async (req: Re
   const { name, isActive } = req.body;
   const row = await prisma.district.update({ where: { id }, data: { name, isActive } });
   res.json(row);
+});
+
+router.delete('/districts/:id', requireAuth, requireCountrySysAdmin, async (req: Request, res: Response) => {
+  const id = parseInt(req.params.id, 10);
+  if (req.auth?.role === 'COUNTRY_SYSADMIN') {
+    const existing = await prisma.district.findUnique({ where: { id }, include: { province: { select: { countryId: true } } } });
+    if (!existing || existing.province.countryId !== req.auth.countryId) {
+      res.status(403).json({ error: 'District is not in your country' }); return;
+    }
+  }
+  const childCount = await prisma.lovArea.count({ where: { districtId: id } });
+  if (childCount > 0) {
+    res.status(409).json({ error: `Cannot delete — this district has ${childCount} area(s). Delete them first.` }); return;
+  }
+  try {
+    await prisma.district.delete({ where: { id } });
+    res.status(204).send();
+  } catch {
+    res.status(409).json({ error: 'Cannot delete — district may still have linked data.' });
+  }
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -213,6 +254,79 @@ router.put('/areas/:id', requireAuth, requireCountrySysAdmin, async (req: Reques
   const { value, isActive } = req.body;
   const row = await prisma.lovArea.update({ where: { id }, data: { value, isActive } });
   res.json(row);
+});
+
+router.delete('/areas/:id', requireAuth, requireCountrySysAdmin, async (req: Request, res: Response) => {
+  const id = parseInt(req.params.id, 10);
+  if (req.auth?.role === 'COUNTRY_SYSADMIN') {
+    const existing = await prisma.lovArea.findUnique({
+      where: { id },
+      include: { district: { include: { province: { select: { countryId: true } } } } },
+    });
+    if (!existing || !existing.district || existing.district.province.countryId !== req.auth.countryId) {
+      res.status(403).json({ error: 'Area is not in your country' }); return;
+    }
+  }
+  const orgCount = await prisma.organisation.count({ where: { areaId: id } });
+  if (orgCount > 0) {
+    res.status(409).json({ error: `Cannot delete — ${orgCount} organisation(s) reference this area.` }); return;
+  }
+  try {
+    await prisma.lovArea.delete({ where: { id } });
+    res.status(204).send();
+  } catch {
+    res.status(409).json({ error: 'Cannot delete — area may still have linked data.' });
+  }
+});
+
+// ── GroupAdmin area management (org-scoped areas via requireGroupSysAdmin) ───────
+
+router.get('/group-areas', requireAuth, requireGroupSysAdmin, async (req: Request, res: Response) => {
+  const organisationId = req.auth?.organisationId;
+  if (!organisationId) { res.status(403).json({ error: 'No organisation assigned' }); return; }
+  const rows = await prisma.lovArea.findMany({
+    where: { organisationId },
+    orderBy: { value: 'asc' },
+  });
+  res.json(rows);
+});
+
+router.post('/group-areas', requireAuth, requireGroupSysAdmin, async (req: Request, res: Response) => {
+  const organisationId = req.auth?.organisationId;
+  if (!organisationId) { res.status(403).json({ error: 'No organisation assigned' }); return; }
+  const { value } = req.body as { value: string };
+  if (!value?.trim()) { res.status(400).json({ error: 'value is required' }); return; }
+  const row = await prisma.lovArea.create({
+    data: { value: value.trim(), organisationId, districtId: null },
+  });
+  res.status(201).json(row);
+});
+
+router.put('/group-areas/:id', requireAuth, requireGroupSysAdmin, async (req: Request, res: Response) => {
+  const id = parseInt(req.params.id, 10);
+  const organisationId = req.auth?.organisationId;
+  const existing = await prisma.lovArea.findUnique({ where: { id }, select: { organisationId: true } });
+  if (!existing || existing.organisationId !== organisationId) {
+    res.status(403).json({ error: 'Area does not belong to your organisation' }); return;
+  }
+  const { value, isActive } = req.body;
+  const row = await prisma.lovArea.update({ where: { id }, data: { value, isActive } });
+  res.json(row);
+});
+
+router.delete('/group-areas/:id', requireAuth, requireGroupSysAdmin, async (req: Request, res: Response) => {
+  const id = parseInt(req.params.id, 10);
+  const organisationId = req.auth?.organisationId;
+  const existing = await prisma.lovArea.findUnique({ where: { id }, select: { organisationId: true } });
+  if (!existing || existing.organisationId !== organisationId) {
+    res.status(403).json({ error: 'Area does not belong to your organisation' }); return;
+  }
+  try {
+    await prisma.lovArea.delete({ where: { id } });
+    res.status(204).send();
+  } catch {
+    res.status(409).json({ error: 'Cannot delete — area may still have linked incidents.' });
+  }
 });
 
 // ══════════════════════════════════════════════════════════════════════════════

@@ -139,9 +139,9 @@ export function RegisterOrg() {
           </div>
 
           <div>
-            <label style={label}>Province <span style={req}>*</span></label>
+            <label style={label}>Region <span style={req}>*</span></label>
             <select style={input} value={provinceId} onChange={(e) => onProvinceChange(e.target.value)} disabled={!countryId}>
-              <option value="">— Select province —</option>
+              <option value="">— Select region —</option>
               {provinces.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </div>

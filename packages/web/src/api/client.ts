@@ -100,7 +100,14 @@ export const apiClient = {
   getCountries: (all?: boolean) => request<unknown[]>('GET', `/api/hierarchy/countries${all ? '/all' : ''}`),
   createCountry: (data: unknown) => request<unknown>('POST', '/api/hierarchy/countries', data),
   updateCountry: (id: number, data: unknown) => request<unknown>('PUT', `/api/hierarchy/countries/${id}`, data),
+  deleteCountry: (id: number) => request<unknown>('DELETE', `/api/hierarchy/countries/${id}`),
 
+  // Regions (aka Provinces in DB — all calls use /provinces endpoint)
+  getRegions: (countryId?: number) => request<unknown[]>('GET', `/api/hierarchy/provinces${countryId ? `?countryId=${countryId}` : ''}`),
+  createRegion: (data: unknown) => request<unknown>('POST', '/api/hierarchy/provinces', data),
+  updateRegion: (id: number, data: unknown) => request<unknown>('PUT', `/api/hierarchy/provinces/${id}`, data),
+  deleteRegion: (id: number) => request<unknown>('DELETE', `/api/hierarchy/provinces/${id}`),
+  // Legacy aliases (used by OrganisationsPage etc.)
   getProvinces: (countryId?: number) => request<unknown[]>('GET', `/api/hierarchy/provinces${countryId ? `?countryId=${countryId}` : ''}`),
   createProvince: (data: unknown) => request<unknown>('POST', '/api/hierarchy/provinces', data),
   updateProvince: (id: number, data: unknown) => request<unknown>('PUT', `/api/hierarchy/provinces/${id}`, data),
@@ -114,6 +121,7 @@ export const apiClient = {
   },
   createDistrict: (data: unknown) => request<unknown>('POST', '/api/hierarchy/districts', data),
   updateDistrict: (id: number, data: unknown) => request<unknown>('PUT', `/api/hierarchy/districts/${id}`, data),
+  deleteDistrict: (id: number) => request<unknown>('DELETE', `/api/hierarchy/districts/${id}`),
 
   getOrganisations: (params?: { districtId?: number; provinceId?: number; countryId?: number; all?: boolean }) => {
     if (params?.all) return request<unknown[]>('GET', '/api/hierarchy/organisations/all');
@@ -124,7 +132,7 @@ export const apiClient = {
   updateOrganisation: (id: number, data: unknown) => request<unknown>('PUT', `/api/hierarchy/organisations/${id}`, data),
   deleteOrganisation: (id: number) => request<unknown>('DELETE', `/api/hierarchy/organisations/${id}`),
 
-  // Areas (geographic: LovArea with districtId, no organisationId)
+  // Geographic areas (LovArea with districtId, no organisationId) — CountrySysAdmin+
   getHierarchyAreas: (districtId?: number, countryId?: number) => {
     const params = new URLSearchParams();
     if (districtId) params.set('districtId', String(districtId));
@@ -134,6 +142,13 @@ export const apiClient = {
   },
   createHierarchyArea: (data: unknown) => request<unknown>('POST', '/api/hierarchy/areas', data),
   updateHierarchyArea: (id: number, data: unknown) => request<unknown>('PUT', `/api/hierarchy/areas/${id}`, data),
+  deleteHierarchyArea: (id: number) => request<unknown>('DELETE', `/api/hierarchy/areas/${id}`),
+
+  // Group areas (org-scoped LovAreas — GroupSysAdmin+)
+  getGroupAreas: () => request<unknown[]>('GET', '/api/hierarchy/group-areas'),
+  createGroupArea: (data: unknown) => request<unknown>('POST', '/api/hierarchy/group-areas', data),
+  updateGroupArea: (id: number, data: unknown) => request<unknown>('PUT', `/api/hierarchy/group-areas/${id}`, data),
+  deleteGroupArea: (id: number) => request<unknown>('DELETE', `/api/hierarchy/group-areas/${id}`),
 
   // Group Admins (CountrySysAdmin creates GROUP_SYSADMIN / GROUP_ADMIN for an org)
   createGroupAdmin: (data: unknown) => request<unknown>('POST', '/api/hierarchy/group-admins', data),

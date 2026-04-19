@@ -190,13 +190,12 @@ router.get('/export/csv', requireAuth, async (req: Request, res: Response) => {
         Date: inc.incidentDate.toISOString().split('T')[0],
         Time: inc.incidentDate.toISOString().split('T')[1].substring(0, 8),
         Country: incOrg?.district?.province?.country?.name ?? '',
-        Province: incOrg?.district?.province?.name ?? '',
+        Region: incOrg?.district?.province?.name ?? '',
         District: incOrg?.district?.name ?? '',
         Organisation: incOrg?.name ?? '',
         CallType: inc.callType?.value ?? '',
         Diagnosis: (patient as { reason?: { value: string } }).reason?.value ?? '',
-        Area: inc.location?.area?.value ?? '',
-        Location: inc.location?.value ?? '',
+        Location: (inc as unknown as { locationText?: string | null }).locationText ?? inc.location?.value ?? '',
         PatientNo: String(patient.patientNumber),
         ColourCode: patient.colourCode ?? '',
         BP: patient.bpSystolic ? `${patient.bpSystolic}/${patient.bpDiastolic}` : '',
@@ -270,6 +269,7 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
       organisationId: req.auth?.organisationId ?? null,
       callTypeId: data.callTypeId ?? null,
       locationId: data.locationId ?? null,
+      locationText: data.locationText ? data.locationText.trim().slice(0, 25) : null,
       patientCount: data.patientCount,
       syncedAt: new Date(),
       responders: {
@@ -350,6 +350,7 @@ router.put('/:id', requireAuth, async (req: Request, res: Response) => {
     data: {
       callTypeId: data.callTypeId ?? null,
       locationId: data.locationId ?? null,
+      locationText: data.locationText ? data.locationText.trim().slice(0, 25) : null,
       patientCount: data.patientCount,
       syncedAt: new Date(),
       responders: {
