@@ -35,6 +35,10 @@ export function UserManagementPage() {
   const [saving,  setSaving]  = useState<number | null>(null);
   const [error,   setError]   = useState<string | null>(null);
 
+  // Email inline edit
+  const [editingEmail, setEditingEmail] = useState<number | null>(null);
+  const [emailValue,   setEmailValue]   = useState('');
+
   // Mobile inline edit
   const [editingMobile, setEditingMobile] = useState<number | null>(null);
   const [mobileValue,   setMobileValue]   = useState('');
@@ -81,6 +85,19 @@ export function UserManagementPage() {
         .catch(() => {});
     }
   }, [canEditDetails]);
+
+  // ── Email save ────────────────────────────────────────────────────────────
+
+  async function saveEmail(user: UserRow) {
+    setSaving(user.id);
+    try {
+      await apiClient.updateUserRole(user.id, { email: emailValue });
+      setEditingEmail(null);
+      await load();
+    } catch {
+      alert('Failed to update email address. Please try again.');
+    } finally { setSaving(null); }
+  }
 
   // ── Mobile save ───────────────────────────────────────────────────────────
 
@@ -303,7 +320,38 @@ export function UserManagementPage() {
                         {user.username ?? '—'}
                       </td>
                     )}
-                    <td style={{ ...td, color: '#6b7280', fontSize: 13 }}>{user.email ?? '—'}</td>
+                    {/* Email — inline edit */}
+                    <td style={{ ...td, color: '#6b7280', fontSize: 13 }}>
+                      {editingEmail === user.id ? (
+                        <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                          <input
+                            autoFocus
+                            style={{ border: '1.5px solid #dc2626', borderRadius: 6, padding: '3px 8px', fontSize: 13, width: 170 }}
+                            value={emailValue}
+                            onChange={(e) => setEmailValue(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') saveEmail(user); if (e.key === 'Escape') setEditingEmail(null); }}
+                            placeholder="email@example.com"
+                            type="email"
+                          />
+                          <button onClick={() => saveEmail(user)} disabled={saving === user.id}
+                            style={{ fontSize: 12, padding: '3px 8px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 5, cursor: 'pointer' }}>
+                            Save
+                          </button>
+                          <button onClick={() => setEditingEmail(null)}
+                            style={{ fontSize: 12, padding: '3px 8px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 5, cursor: 'pointer' }}>
+                            ✕
+                          </button>
+                        </span>
+                      ) : (
+                        <span
+                          title="Click to edit email"
+                          style={{ cursor: 'pointer', borderBottom: '1px dashed #d1d5db' }}
+                          onClick={() => { setEditingEmail(user.id); setEmailValue(user.email ?? ''); }}
+                        >
+                          {user.email ?? '—'}
+                        </span>
+                      )}
+                    </td>
 
                     {/* Mobile — inline edit */}
                     <td style={{ ...td, color: '#6b7280', fontSize: 13 }}>
