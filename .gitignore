@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+packages/*/node_modules/
+
+# Web build output — Render builds this from source; never commit it
+packages/web/dist/
+
+# Local env
+.env
+.env.local
+*.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
