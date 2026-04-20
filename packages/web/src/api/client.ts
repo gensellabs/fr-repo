@@ -55,7 +55,10 @@ export const apiClient = {
   getIncident: (id: number) => request<unknown>('GET', `/api/incidents/${id}`),
   createIncident: (data: unknown) => request<unknown>('POST', '/api/incidents', data),
   updateIncident: (id: number, data: unknown) => request<unknown>('PUT', `/api/incidents/${id}`, data),
-  exportCsv: () => fetch('/api/incidents/export/csv', { headers: { Authorization: `Bearer ${getToken()}` } }),
+  exportCsv: (params?: URLSearchParams) => {
+    const qs = params?.toString();
+    return fetch(`${BASE}/api/incidents/export/csv${qs ? `?${qs}` : ''}`, { headers: { Authorization: `Bearer ${getToken()}` } });
+  },
 
   // Admin
   getAuditLog: (params?: Record<string, string>) => {

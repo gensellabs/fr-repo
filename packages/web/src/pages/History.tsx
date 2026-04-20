@@ -364,11 +364,7 @@ export function History() {
     if (districtFilter.length) params.set('districtId', districtFilter.join(','));
     if (orgFilter.length) params.set('organisationId', orgFilter.join(','));
 
-    const token = localStorage.getItem('auth_token');
-    const qs = params.toString();
-    fetch(`/api/incidents/export/csv${qs ? `?${qs}` : ''}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    }).then((res) => res.blob()).then((blob) => {
+    apiClient.exportCsv(params).then((res) => res.blob()).then((blob) => {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
