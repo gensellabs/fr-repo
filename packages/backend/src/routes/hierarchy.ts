@@ -459,13 +459,12 @@ router.post('/group-admins', requireAuth, requireCountrySysAdmin, async (req: Re
   // CountrySysAdmin: verify org is in their country
   const org = await prisma.organisation.findUnique({
     where: { id: Number(orgId) },
-    include: { country: { select: { isoCode: true } } },
   });
   if (!org) { res.status(404).json({ error: 'Organisation not found' }); return; }
   if (req.auth?.role === 'COUNTRY_SYSADMIN' && org.countryId !== req.auth.countryId) {
     res.status(403).json({ error: 'Organisation is not in your country' }); return;
   }
-  const username   = await generateUsername(firstName, surname, org.country.isoCode, mobile ?? null);
+  const username   = await generateUsername(firstName, surname, org.countryId);
   const passwordHash = await bcrypt.hash(password, 12);
   const responder  = await prisma.lovResponder.create({
     data: {
@@ -476,6 +475,7 @@ router.post('/group-admins', requireAuth, requireCountrySysAdmin, async (req: Re
       isAdmin:    true,
       isSysAdmin: role === 'GROUP_SYSADMIN',
       passwordHash,
+      mustChangePassword: true,
     },
     select: { id: true, value: true, firstName: true, surname: true, email: true, username: true, role: true },
   });
@@ -592,11 +592,8 @@ router.put('/org-registrations/:id', requireAuth, requireCountrySysAdmin, async 
     const firstName  = nameParts[0] ?? reg.contactName;
     const surname    = nameParts.slice(1).join(' ') || null;
 
-    // Look up country ISO code for username generation
-    const countryRow = await prisma.country.findUnique({ where: { id: reg.countryId }, select: { isoCode: true } });
-    const username   = countryRow
-      ? await generateUsername(firstName, surname, countryRow.isoCode, reg.contactMobile ?? null)
-      : null;
+    // Generate username using new country-scoped counter formula
+    const username = await generateUsername(firstName, surname, reg.countryId);
 
     const groupSysAdmin = await prisma.lovResponder.create({
       data: {
@@ -611,6 +608,7 @@ router.put('/org-registrations/:id', requireAuth, requireCountrySysAdmin, async 
         isAdmin: true,
         isSysAdmin: true,
         passwordHash,
+        mustChangePassword: true,
       },
       select: { id: true, value: true, firstName: true, surname: true, email: true, username: true },
     });
