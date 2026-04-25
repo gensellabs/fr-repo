@@ -1,9 +1,12 @@
 import { prisma } from '../lib/prisma';
 import { Router, Request, Response } from 'express';
+import bcrypt from 'bcryptjs';
 
 import { requireAuth, requireAdmin, requireSysAdmin } from '../middleware/auth';
 
 const router = Router();
+
+const DEFAULT_PASSWORD = 'Password!12@';
 
 
 // ─── GET /api/admin/audit-log ─────────────────────────────────────────────────
@@ -173,6 +176,41 @@ router.patch('/users/:id/role', requireAuth, requireSysAdmin, async (req: Reques
   });
 
   res.json(user);
+});
+
+// ─── POST /api/admin/users/:id/reset-password  (SysAdmin only) ───────────────
+// Resets the responder's password to the default and forces change on next login.
+router.post('/users/:id/reset-password', requireAuth, requireSysAdmin, async (req: Request, res: Response) => {
+  const id = parseInt(req.params.id, 10);
+
+  // Scope check: GROUP_SYSADMIN can only reset users in their own org
+  if (req.auth?.role === 'GROUP_SYSADMIN') {
+    const target = await prisma.lovResponder.findUnique({ where: { id }, select: { organisationId: true } });
+    if (!target || target.organisationId !== req.auth.organisationId) {
+      res.status(403).json({ error: 'Access denied' });
+      return;
+    }
+  }
+
+  // COUNTRY_SYSADMIN scope check
+  if (req.auth?.role === 'COUNTRY_SYSADMIN') {
+    const target = await prisma.lovResponder.findUnique({
+      where: { id },
+      select: { organisation: { select: { countryId: true } } },
+    });
+    if (!target || target.organisation?.countryId !== req.auth.countryId) {
+      res.status(403).json({ error: 'Access denied' });
+      return;
+    }
+  }
+
+  const hash = await bcrypt.hash(DEFAULT_PASSWORD, 12);
+  await prisma.lovResponder.update({
+    where: { id },
+    data: { passwordHash: hash, mustChangePassword: true },
+  });
+
+  res.json({ ok: true });
 });
 
 export default router;

@@ -68,14 +68,15 @@ export const apiClient = {
   getStats: () => request<unknown>('GET', '/api/admin/stats'),
 
   // Auth
-  createSession: (username: string, pin: string) =>
+  createSession: (username: string, password: string) =>
     request<{
       token: string;
       responderId: number; responderName: string; firstName?: string; surname?: string;
       organisationId?: number; organisationName?: string;
       countryId?: number; countryName?: string;
       role: string; isAdmin: boolean; isSysAdmin: boolean;
-    }>('POST', '/api/auth/session', { username, pin }),
+      mustChangePassword?: boolean;
+    }>('POST', '/api/auth/session', { username, password }),
   adminLogin: (email: string, password: string) =>
     request<{
       token: string;
@@ -87,7 +88,12 @@ export const apiClient = {
       // Shared (present for both AdminUser and GROUP roles)
       countryId?: number; countryName?: string;
       role: string; isAdmin: boolean; isSysAdmin: boolean;
+      mustChangePassword?: boolean;
     }>('POST', '/api/auth/admin-login', { email, password }),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<{ ok: boolean }>('POST', '/api/auth/change-password', { currentPassword, newPassword }),
+  resetUserPassword: (id: number) =>
+    request<{ ok: boolean }>('POST', `/api/admin/users/${id}/reset-password`),
 
   // User management (SysAdmin only)
   getUsers: () => request<{

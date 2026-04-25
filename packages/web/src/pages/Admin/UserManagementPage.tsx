@@ -26,9 +26,10 @@ interface DropdownItem { id: number; name: string }
 
 export function UserManagementPage() {
   const { auth } = useAuth();
-  const canSeeUsername = auth?.role === 'SUPER_ADMIN' || auth?.role === 'COUNTRY_SYSADMIN';
-  const canSeeOrgCols  = auth?.role === 'SUPER_ADMIN' || auth?.role === 'COUNTRY_SYSADMIN';
-  const canEditDetails = auth?.role === 'SUPER_ADMIN';
+  const canSeeUsername   = auth?.role === 'SUPER_ADMIN' || auth?.role === 'COUNTRY_SYSADMIN';
+  const canSeeOrgCols   = auth?.role === 'SUPER_ADMIN' || auth?.role === 'COUNTRY_SYSADMIN';
+  const canEditDetails  = auth?.role === 'SUPER_ADMIN';
+  const canResetPassword = auth?.isSysAdmin === true; // GROUP_SYSADMIN, COUNTRY_SYSADMIN, SUPER_ADMIN
 
   const [users,   setUsers]   = useState<UserRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -205,6 +206,19 @@ export function UserManagementPage() {
     } finally { setSaving(null); }
   }
 
+  // ── Reset password ────────────────────────────────────────────────────────
+
+  async function resetPassword(user: UserRow) {
+    if (!window.confirm(`Reset password for ${user.firstName ?? user.value} ${user.surname ?? ''}?\n\nTheir password will be reset to the default and they will be required to change it on next login.`)) return;
+    setSaving(user.id);
+    try {
+      await apiClient.resetUserPassword(user.id);
+      alert(`Password reset successfully for ${user.firstName ?? user.value} ${user.surname ?? ''}. They will be prompted to change it on next web login.`);
+    } catch {
+      alert('Failed to reset password. Please try again.');
+    } finally { setSaving(null); }
+  }
+
   // ── Filters ───────────────────────────────────────────────────────────────
 
   const countries = Array.from(new Map(
@@ -242,7 +256,8 @@ export function UserManagementPage() {
     1 + // Active
     1 + // Admin
     1 + // SysAdmin
-    (canEditDetails ? 1 : 0); // Edit Details
+    (canEditDetails ? 1 : 0) + // Edit Details
+    (canResetPassword ? 1 : 0); // Reset Password
 
   return (
     <div>
@@ -301,7 +316,8 @@ export function UserManagementPage() {
                 <th style={{ ...th, textAlign: 'center' }}>Active</th>
                 <th style={{ ...th, textAlign: 'center' }}>Admin</th>
                 <th style={{ ...th, textAlign: 'center' }}>SysAdmin</th>
-                {canEditDetails && <th style={{ ...th, width: 80 }} />}
+                {canEditDetails    && <th style={{ ...th, width: 80 }} />}
+                {canResetPassword  && <th style={{ ...th, width: 100, textAlign: 'center' }}>Password</th>}
               </tr>
             </thead>
             <tbody>
@@ -406,6 +422,18 @@ export function UserManagementPage() {
                           onClick={() => editingDetails === user.id ? setEditingDetails(null) : openDetailEdit(user)}
                         >
                           {editingDetails === user.id ? 'Close' : 'Edit'}
+                        </button>
+                      </td>
+                    )}
+                    {canResetPassword && (
+                      <td style={{ ...td, textAlign: 'center' }}>
+                        <button
+                          style={resetPwdBtn}
+                          disabled={saving === user.id}
+                          onClick={() => resetPassword(user)}
+                          title="Reset to default password — user must change on next login"
+                        >
+                          Reset Pwd
                         </button>
                       </td>
                     )}
@@ -540,3 +568,4 @@ const detailLabel: React.CSSProperties    = { display: 'flex', flexDirection: 'c
 const detailInp: React.CSSProperties      = { padding: '7px 10px', borderRadius: 7, border: '1.5px solid #d1d5db', fontSize: 13, minWidth: 160 };
 const saveDetailBtn: React.CSSProperties  = { padding: '8px 18px', backgroundColor: '#dc2626', color: '#fff', border: 'none', borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: 'pointer' };
 const cancelDetailBtn: React.CSSProperties = { padding: '8px 14px', backgroundColor: '#f3f4f6', color: '#374151', border: 'none', borderRadius: 7, fontSize: 13, cursor: 'pointer' };
+const resetPwdBtn: React.CSSProperties    = { padding: '4px 10px', fontSize: 11, fontWeight: 600, border: '1.5px solid #f97316', borderRadius: 6, background: '#fff7ed', cursor: 'pointer', color: '#c2410c' };

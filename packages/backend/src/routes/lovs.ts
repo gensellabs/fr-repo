@@ -3,6 +3,9 @@ import { Router, Request, Response } from 'express';
 
 import { requireAuth, requireAdmin, requireCountrySysAdmin, AuthPayload } from '../middleware/auth';
 import { generateUsername } from '../lib/username';
+import bcrypt from 'bcryptjs';
+
+const DEFAULT_PASSWORD = 'Password!12@';
 import { LovCreateSchema, LovUpdateSchema, LovDrugCreateSchema, LovLocationCreateSchema } from '@firstresponders/shared';
 
 const router = Router();
@@ -227,18 +230,20 @@ router.post('/:table', requireAuth, async (req: Request, res: Response) => {
 
     // Look up org → country for username generation
     const orgId = req.auth?.organisationId ?? null;
-    let isoCode: string | null = null;
+    let countryId: number | null = null;
     if (orgId) {
       const org = await prisma.organisation.findUnique({
         where: { id: orgId },
-        include: { country: { select: { isoCode: true } } },
+        include: { country: { select: { id: true } } },
       });
-      isoCode = org?.country?.isoCode ?? null;
+      countryId = org?.country?.id ?? null;
     }
 
-    const username = isoCode
-      ? await generateUsername(first, last, isoCode, mobileClean)
+    const username = countryId
+      ? await generateUsername(first, last, countryId)
       : null;
+
+    const defaultHash = await bcrypt.hash(DEFAULT_PASSWORD, 12);
 
     const item = await prisma.lovResponder.create({
       data: {
@@ -249,6 +254,8 @@ router.post('/:table', requireAuth, async (req: Request, res: Response) => {
         email: email?.trim() || null,
         mobile: mobileClean,
         organisationId: orgId,
+        passwordHash: defaultHash,
+        mustChangePassword: true,
         sortOrder: sortOrder ?? 0,
         createdBy: createdBy ?? req.auth?.responderName ?? null,
       },

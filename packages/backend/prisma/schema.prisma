@@ -233,8 +233,9 @@ model LovResponder {
   username       String?             @unique @db.VarChar(50)
   email          String?
   mobile         String?
-  passwordHash   String?
-  lastLoginAt    DateTime?
+  passwordHash       String?
+  mustChangePassword Boolean  @default(true)
+  lastLoginAt        DateTime?
   organisationId Int?
   organisation   Organisation?       @relation(fields: [organisationId], references: [id])
   role           OrgRole             @default(RESPONDER)

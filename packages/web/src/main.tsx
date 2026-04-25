@@ -15,6 +15,7 @@ import { HierarchyPage } from './pages/Admin/HierarchyPage';
 import { OrganisationsPage } from './pages/Admin/OrganisationsPage';
 import { AdminUsersPage } from './pages/Admin/AdminUsersPage';
 import { RegisterOrg } from './pages/RegisterOrg';
+import { ChangePassword } from './pages/ChangePassword';
 import { AppLayout } from './components/AppLayout';
 import { useAuth } from './hooks/useAuth';
 
@@ -27,6 +28,16 @@ function App() {
         <Route path="/admin-login" element={<AdminLogin />} />
         <Route path="/register-org" element={<RegisterOrg />} />
         <Route path="*" element={<Login />} />
+      </Routes>
+    );
+  }
+
+  // Force password change before any other route
+  if (auth.mustChangePassword) {
+    return (
+      <Routes>
+        <Route path="/change-password" element={<ChangePassword />} />
+        <Route path="*" element={<Navigate to="/change-password" replace />} />
       </Routes>
     );
   }

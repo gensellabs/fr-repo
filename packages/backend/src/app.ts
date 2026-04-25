@@ -28,6 +28,10 @@ async function runStartupMigrations() {
     await prisma.$executeRawUnsafe(
       `DROP INDEX IF EXISTS "lov_areas_value_key"`
     );
+    // Password-based auth: force-change flag
+    await prisma.$executeRawUnsafe(
+      `ALTER TABLE lov_responders ADD COLUMN IF NOT EXISTS "mustChangePassword" BOOLEAN NOT NULL DEFAULT true`
+    );
     console.log('Startup migrations OK');
   } catch (e) {
     console.error('Startup migration warning:', e);
